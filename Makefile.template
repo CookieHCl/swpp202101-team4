@@ -1,0 +1,28 @@
+.SUFFIXES : .cpp .o
+
+SRC_CORE=$(wildcard src/core/*.cpp)
+SRC_BACKEND=$(wildcard src/backend/*.cpp)
+
+OBJ_CORE=$(SRC_CORE:src/core/%.cpp=obj/core/%.o)
+OBJ_BACKEND=$(SRC_BACKEND:src/backend/%.cpp=obj/backend/%.o)
+
+_dummy := $(shell mkdir -p obj obj/core obj/backend bin)
+
+all: bin/sf-compiler
+
+test: all
+	@echo "(make test) IMPLEMENT THIS!"
+
+bin/sf-compiler: $(OBJ_CORE) $(OBJ_BACKEND)
+	@$(CXX) $(LDFLAGS) -o bin/sf-compiler $(OBJ_CORE) $(OBJ_BACKEND)
+
+obj/core/%.o: src/core/%.cpp 
+	@echo "compiling src/core/$<..."
+	@$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+obj/backend/%.o: src/backend/%.cpp $(filter-out src/backend/%.h, $(SRC_BACKEND))
+	@echo "compiling src/backend/$<..."
+	@$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+clean:
+	rm -rf obj bin
