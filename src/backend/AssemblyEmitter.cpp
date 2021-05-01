@@ -103,7 +103,7 @@ void AssemblyEmitter::visitLoadInst(LoadInst& I) {
             *fout << emitInst({name(&I), "= load", size ,"sp", to_string(mem->getOffset())});
         }
         else if(mem->getBase() == TM->gvp()) {
-            *fout << emitInst({name(&I), "= load", size, "20480", to_string(mem->getOffset())});
+            *fout << emitInst({name(&I), "= load", size, "204800", to_string(mem->getOffset())});
         }
         else assert(false && "base of memory pointers should be sp or gvp");
     }
@@ -125,7 +125,7 @@ void AssemblyEmitter::visitStoreInst(StoreInst& I) {
             *fout << emitInst({"store", size, name(val), "sp", to_string(mem->getOffset())});
         }
         else if(mem->getBase() == TM->gvp()) {
-            *fout << emitInst({"store", size, name(val), "20480", to_string(mem->getOffset())});
+            *fout << emitInst({"store", size, name(val), "", to_string(mem->getOffset())});
         }
         else assert(false && "base of memory pointers should be sp or gvp");
     }
@@ -172,7 +172,7 @@ void AssemblyEmitter::visitPtrToIntInst(PtrToIntInst& I) {
             *fout << emitBinary(&I, "add", "sp", to_string(mem->getOffset()));
         }
         else if(mem->getBase() == TM->gvp()) {
-            *fout << emitBinary(&I, "add", "20480", to_string(mem->getOffset()));
+            *fout << emitBinary(&I, "add", "204800", to_string(mem->getOffset()));
         }
         else assert(false && "base of memory pointers should be sp or gvp");
     }
