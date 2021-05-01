@@ -125,7 +125,7 @@ void AssemblyEmitter::visitStoreInst(StoreInst& I) {
             *fout << emitInst({"store", size, name(val), "sp", to_string(mem->getOffset())});
         }
         else if(mem->getBase() == TM->gvp()) {
-            *fout << emitInst({"store", size, name(val), "", to_string(mem->getOffset())});
+            *fout << emitInst({"store", size, name(val), "204800", to_string(mem->getOffset())});
         }
         else assert(false && "base of memory pointers should be sp or gvp");
     }
