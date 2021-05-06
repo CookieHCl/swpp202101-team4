@@ -5,6 +5,8 @@
 #include "../backend/RegisterSpill.h"
 #include "../backend/UnfoldVectorInst.h"
 
+#include "Team4Header.h"
+
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
