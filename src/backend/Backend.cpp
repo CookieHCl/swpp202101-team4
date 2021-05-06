@@ -170,18 +170,26 @@ void Backend::SSAElimination(Module &M, SymbolMap &symbolMap, RegisterGraph& RG)
             // If there is u -> v edge in graph, it means the value of register v
             // should move to register u.
             
-            vector<unsigned> indegree(32, 0);
+            vector<unsigned> indegree(32, 0), outdegree(32, 0);
             set<int> unused;
             for(unsigned i = 0; i < 32; i++) {
+                bool added[32] = {0,};
                 for(auto &there : adjList[i]) {
-                    if(TM.regNo(there) != -1) {
-                        indegree[TM.regNo(there)]++;
+                    int reg = TM.regNo(there);
+                    if(reg != -1 && !added[reg]) {
+                        indegree[reg]++;
+                        outdegree[i]++;
+                        added[reg] = true;
                     }
                 }
                 // If a register has no outgoing edge, store and use as temporary register.
                 if(i >= RG.getNumColors(&F)) {
                     unused.insert(i);
                 }
+            }
+            // validate phi elim graph
+            for (unsigned i=0; i<32; i++) {
+              assert(outdegree[i] < 2);
             }
             
             // countRest represents the number of untracked vertices, 
@@ -380,6 +388,11 @@ void Backend::SSAElimination(Module &M, SymbolMap &symbolMap, RegisterGraph& RG)
                             Instruction *ctoi = BinaryOperator::CreateMul(value, ConstantInt::get(Context, APInt(value->getType()->getIntegerBitWidth(), 1)));
                             ctoi->insertBefore(block->getTerminator());
                             symbolMap.set(ctoi, symbolMap.get(phi));
+                        }
+                        if(isa<ConstantPointerNull>(value)) {
+                            Instruction *ptoi = CastInst::CreateBitOrPointerCast(value, IntegerType::getInt64Ty(Context));
+                            ptoi->insertBefore(block->getTerminator());
+                            symbolMap.set(ptoi, symbolMap.get(phi));
                         }
                     }
                 }

@@ -183,6 +183,10 @@ void AssemblyEmitter::visitPtrToIntInst(PtrToIntInst& I) {
             *fout << emitCopy(&I, I.getOperand(0));
         }
     }
+    //else ptr is null
+    else if(isa<ConstantPointerNull>(ptr)) {
+        *fout << emitBinary(&I, "mul", "0", "0");
+    }
     else assert(false && "pointer of a memory operation should have an appropriate symbol assigned");
 }
 void AssemblyEmitter::visitIntToPtrInst(IntToPtrInst& I) {
