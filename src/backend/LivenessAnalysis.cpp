@@ -123,17 +123,45 @@ vector<vector<bool>> RegisterGraph::LiveInterval(Module &M)
             }
 
             Instruction* term = BB.getTerminator();
-            //Vector for storing liveness after terminator, before successor
             vector<bool> PhiTerm = live[term];
+            
+            //Vector for storing liveness after terminator, before successor
+            map<unsigned,int> Dead;
+            map<BasicBlock*,unsigned> NumPhi;
+
+            for(BasicBlock* succ : successors(&BB)) {
+                for(PHINode& phi : succ->phis()) {
+                    Value* incomeV = phi.getIncomingValueForBlock(&BB);
+                    unsigned fv = findValue(incomeV);
+                    if (fv != -1)
+                        Dead[fv] = 1;
+                    NumPhi[succ]++;
+                }
+            }
+
+            for(BasicBlock* succ : successors(&BB)) {
+                int phinum = NumPhi[succ];
+                for(PHINode& phi : succ->phis()) {
+                    Value* incomeV = phi.getIncomingValueForBlock(&BB);
+                    unsigned fv = findValue(incomeV);
+
+                    if (phinum >= 2 || (fv != -1 && live[&phi][fv])) {
+                        Dead[fv] = 0;
+                    }
+                }
+            }
+
+            for (auto &[fv, d] : Dead) {
+                if (d) PhiTerm[fv] = false;
+            }
+
+            Dead.clear();
+            NumPhi.clear();
+
             for(BasicBlock* succ : successors(&BB)) {
                 for(PHINode& phi : succ->phis()) {
                     assert(findValue(&phi) != -1 && "phi term should be live.");
                     PhiTerm[findValue(&phi)] = true;
-                    //if incoming value is not used after phi, mark it as dead
-                    Value* incomeV = phi.getIncomingValueForBlock(&BB);
-                    if(findValue(incomeV) != -1 && !live[&phi][findValue(incomeV)]) {
-                        PhiTerm[findValue(incomeV)] = false;
-                    }
                 }
             }
             result.push_back(PhiTerm);
@@ -361,6 +389,16 @@ void RegisterGraph::coallocateIfPossible() {
 
             //Fetch the only user which follows right after.
             Instruction* user = dyn_cast<Instruction>(I.use_begin()->getUser());
+
+            int toChange = valueToColor[I.getFunction()][user], flag = 0;
+            for (Value *v : adjList[&I]) {
+                if (valueToColor[I.getFunction()][v] == toChange) {
+                    flag = 1;
+                    break;
+                }
+            }
+            if (flag) continue;
+
             if(I.getNextNode() != user || SAME_CONSIDER.find(user->getOpcode()) == SAME_CONSIDER.end() || findValue(user) == -1) continue;
 
             valueToColor[I.getFunction()][&I] = valueToColor[I.getFunction()][user];
