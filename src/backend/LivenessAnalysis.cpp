@@ -101,6 +101,15 @@ vector<vector<bool>> RegisterGraph::LiveInterval(Module &M)
             }
         }
 
+        if (V->hasNUses(0) && isa<Instruction>(V)) {
+            // if it has no use
+            Instruction *I = dyn_cast<Instruction>(V);
+            Instruction *Nxt = I->getNextNode();
+            if (Nxt != NULL) {
+                live[Nxt][i] = true;
+            }
+        }
+
         if(isa<PHINode>(V)) {
             PHINode* phi = dyn_cast<PHINode>(V);
             //phinodes should be live from the beginning of the function.
