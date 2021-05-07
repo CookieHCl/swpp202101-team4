@@ -5,10 +5,13 @@ if [ "$#" -ne 1 ]; then
   exit 1
 fi
 
+mkdir -p test
+
 echo "--- Start FileCheck.. ---"
 set -e
 
 for i in `find ./filechecks -name "*.ll"` ; do
-  ./sf-compiler $i -o .tmp.s
-  $1 $i < .tmp.s
+  echo "--- $i ---"
+  bin/sf-compiler $i test/tmp.s
+  $1 $i < test/tmp.s
 done
