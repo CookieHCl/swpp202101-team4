@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // Add IR passes
-  //FPM.addPass(MyPass());
+  FPM.addPass(RemoveUnusedPass());
 
   // Execute IR passes
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
@@ -72,6 +72,8 @@ int main(int argc, char *argv[]) {
   ConstExprRemovePass().run(*M, MAM);
   GEPUnpackPass().run(*M, MAM);
   RegisterSpillPass().run(*M, MAM);
+
+  outs() << *M;
 
   // Execute backend to emit assembly
   Backend B(optOutput, optPrintProgress);
