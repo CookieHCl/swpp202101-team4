@@ -135,27 +135,25 @@ vector<vector<bool>> RegisterGraph::LiveInterval(Module &M)
             vector<bool> PhiTerm = live[term];
             
             //Vector for storing liveness after terminator, before successor
-            map<unsigned,int> Dead;
-            map<BasicBlock*,unsigned> NumPhi;
+            map<unsigned,bool> Dead;
 
             for(BasicBlock* succ : successors(&BB)) {
                 for(PHINode& phi : succ->phis()) {
                     Value* incomeV = phi.getIncomingValueForBlock(&BB);
                     unsigned fv = findValue(incomeV);
                     if (fv != -1)
-                        Dead[fv] = 1;
-                    NumPhi[succ]++;
+                        Dead[fv] = true;
                 }
             }
 
             for(BasicBlock* succ : successors(&BB)) {
-                int phinum = NumPhi[succ];
+                // int phinum = NumPhi[succ];
                 for(PHINode& phi : succ->phis()) {
                     Value* incomeV = phi.getIncomingValueForBlock(&BB);
                     unsigned fv = findValue(incomeV);
 
-                    if (phinum >= 2 || (fv != -1 && live[&phi][fv])) {
-                        Dead[fv] = 0;
+                    if (fv != -1 && live[&phi][fv]) {
+                        Dead[fv] = false;
                     }
                 }
             }
@@ -165,7 +163,22 @@ vector<vector<bool>> RegisterGraph::LiveInterval(Module &M)
             }
 
             Dead.clear();
-            NumPhi.clear();
+
+            // Condition for BranchInst or SwitchInst should be alive
+            BranchInst *br;
+            SwitchInst *swc;
+            Value *cond = NULL;
+
+            if ((br = dyn_cast<BranchInst>(term)) && br->isConditional()) {
+                cond = br->getCondition();
+            } else if ((swc = dyn_cast<SwitchInst>(term))) {
+                cond = swc->getCondition();
+            }
+
+            if (cond != NULL) {
+                unsigned fv = findValue(cond);
+                if (fv != -1) PhiTerm[fv] = true;
+            }
 
             for(BasicBlock* succ : successors(&BB)) {
                 for(PHINode& phi : succ->phis()) {
