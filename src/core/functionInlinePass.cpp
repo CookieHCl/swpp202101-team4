@@ -1,8 +1,16 @@
 #include "Team4Header.h"
 
-/*
- * 
- */
+
+/*************************************************
+ *             Function Inine Pass
+ 
+ * If the number of registers does not overflow,
+ * overflow meaning that it cannot be covered by
+ * 32 registers, even inline the callee function
+ * of a function call, inline it.
+ 
+ ************************************************/
+
 PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM){
 
   // InlineFunctionInfo
@@ -25,6 +33,9 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     if(F.isDeclaration()) continue;
     
     // If there is no extra register, do nothing for the function.
+
+    // The number of registers can be found through
+    // backend::RegisterGraph.getNumColors(Function*)
     unsigned numColor = RG->getNumColors(&F);
     if(numColor >= REGISTER_CAP) continue;
     for(BasicBlock& BB : F) {
@@ -43,14 +54,21 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
         // Minimal filter to detect invalid constructs for inlining
         if(!(isInlineViable(*callee).isSuccess())) continue;
 
+        numColor += f_numColor;
         do_inline.push_back(caller);
       }
     }
   }
 
-  // Inlining
   for(CallBase *caller : do_inline) {
-    InlineFunction(*caller, IFI);
+    
+    // Inline caller with not insert Lifetime
+
+    // llvm::InlineFunctionInfo.InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
+    //                                         AAResults *CalleeAAR,
+    //                                         bool InsertLifetime,
+    //                                         Function *ForwardVarArgsTo)
+    InlineFunction(*caller, IFI, nullptr, false, nullptr);
   }
 
   return PreservedAnalyses::all();
