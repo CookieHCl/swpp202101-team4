@@ -57,8 +57,14 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+  // Add existing IR passes
+  FPM.addPass(SimplifyCFGPass());
+
   // Add IR passes
   //FPM.addPass(MyPass());
+
+  // Add existing IR passes
+  FPM.addPass(SimplifyCFGPass());
 
   // Execute IR passes
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
