@@ -59,11 +59,12 @@ int main(int argc, char *argv[]) {
 
   // Add IR passes
   //FPM.addPass(MyPass());
+  FPM.addPass(ArithmeticPass());
 
   // Execute IR passes
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
-
+  
   // Execute backend passes
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
