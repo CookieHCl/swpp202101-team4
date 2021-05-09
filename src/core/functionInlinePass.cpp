@@ -29,7 +29,7 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
   // caller to inline
   vector<CallBase *> do_inline;
 
-  for(Function& F : M) {
+  for(Function& F : M) {  
     if(F.isDeclaration()) continue;
     
     // If there is no extra register, do nothing for the function.
@@ -61,7 +61,7 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
   }
 
   for(CallBase *caller : do_inline) {
-    
+
     // Inline caller with not insert Lifetime
 
     // llvm::InlineFunctionInfo.InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
