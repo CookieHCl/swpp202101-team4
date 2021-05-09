@@ -133,36 +133,6 @@ vector<vector<bool>> RegisterGraph::LiveInterval(Module &M)
 
             Instruction* term = BB.getTerminator();
             vector<bool> PhiTerm = live[term];
-            
-            //Vector for storing liveness after terminator, before successor
-            map<unsigned,bool> Dead;
-
-            for(BasicBlock* succ : successors(&BB)) {
-                for(PHINode& phi : succ->phis()) {
-                    Value* incomeV = phi.getIncomingValueForBlock(&BB);
-                    unsigned fv = findValue(incomeV);
-                    if (fv != -1)
-                        Dead[fv] = true;
-                }
-            }
-
-            for(BasicBlock* succ : successors(&BB)) {
-                // int phinum = NumPhi[succ];
-                for(PHINode& phi : succ->phis()) {
-                    Value* incomeV = phi.getIncomingValueForBlock(&BB);
-                    unsigned fv = findValue(incomeV);
-
-                    if (fv != -1 && live[&phi][fv]) {
-                        Dead[fv] = false;
-                    }
-                }
-            }
-
-            for (auto &[fv, d] : Dead) {
-                if (d) PhiTerm[fv] = false;
-            }
-
-            Dead.clear();
 
             // Condition for BranchInst or SwitchInst should be alive
             BranchInst *br;
