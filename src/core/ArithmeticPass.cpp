@@ -69,7 +69,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
       Value* FirstOperand = ShlI->getOperand(0);
       ConstantInt* ShlVal = dyn_cast<ConstantInt> (ShlI->getOperand(1));
       uint32_t ushlval = ShlVal->getZExtValue();
-      Instruction*  NewInst = BinaryOperator::Create(Instruction::Mul,FirstOperand,ConstantInt::get(FirstOperand->getType(),(1<<ushlval)));
+      Instruction*  NewInst = BinaryOperator::Create(Instruction::Mul,FirstOperand,ConstantInt::get(FirstOperand->getType(),(1ull<<ushlval)));
       ReplaceInstWithInst(ShlI,NewInst);
     }
 
@@ -78,7 +78,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
       Value* FirstOperand = LShrI->getOperand(0);
       ConstantInt* LShrVal = dyn_cast<ConstantInt> (LShrI->getOperand(1));
       uint32_t ushrval = LShrVal->getZExtValue();
-      Instruction*  NewInst = BinaryOperator::Create(Instruction::UDiv,FirstOperand,ConstantInt::get(FirstOperand->getType(),(1<<ushrval)));
+      Instruction*  NewInst = BinaryOperator::Create(Instruction::UDiv,FirstOperand,ConstantInt::get(FirstOperand->getType(),(1ull<<ushrval)));
       ReplaceInstWithInst(LShrI,NewInst);
     }
 
@@ -87,7 +87,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
       Value* FirstOperand = AShrI->getOperand(0);
       ConstantInt* AShrVal = dyn_cast<ConstantInt> (AShrI->getOperand(1));
       uint32_t ashrval = AShrVal->getZExtValue();
-      Instruction*  NewInst = BinaryOperator::Create(Instruction::SDiv,FirstOperand,ConstantInt::get(FirstOperand->getType(),(1<<ashrval)));
+      Instruction*  NewInst = BinaryOperator::Create(Instruction::SDiv,FirstOperand,ConstantInt::get(FirstOperand->getType(),(1ull<<ashrval)));
       ReplaceInstWithInst(AShrI,NewInst);
     }
 
