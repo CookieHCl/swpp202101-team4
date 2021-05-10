@@ -27,11 +27,6 @@ using namespace backend;
 using namespace llvm::PatternMatch;
 
 class FunctionInlinePass : public llvm::PassInfoMixin<FunctionInlinePass> {
-  //Module which this analysis runs.
-  Module *M;
-  //Register graph for the module.
-  RegisterGraph *RG;
-
 public:
 
   //Register file size of the target machine.
