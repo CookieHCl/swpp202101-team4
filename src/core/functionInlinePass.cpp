@@ -15,11 +15,9 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
 
   // InlineFunctionInfo
   FunctionAnalysisManager &FAM = MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
-  function_ref<AssumptionCache &(Function &)> GetAssumptionCache =
-      [&](Function &F) -> AssumptionCache & {
+  InlineFunctionInfo IFI(nullptr, [&](Function &F) -> AssumptionCache & {
       return FAM.getResult<AssumptionAnalysis>(F);
-  };
-  InlineFunctionInfo IFI(nullptr, GetAssumptionCache);
+  });
 
   //Register graph for the module.
   RegisterGraph tRG(M);
