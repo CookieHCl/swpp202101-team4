@@ -1,4 +1,4 @@
-#include "Team4Header.h"
+#include "functionInlinePass.h"
 
 
 /*************************************************
@@ -21,15 +21,14 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
   };
   InlineFunctionInfo IFI(nullptr, GetAssumptionCache);
 
-  // Module, Register Graph
-  this->M = &M;
+  //Register graph for the module.
   RegisterGraph tRG(M);
-  this->RG = &tRG;
+  RegisterGraph *RG = &tRG;
 
   // caller to inline
   vector<CallBase *> do_inline;
 
-  for(Function& F : M) {  
+  for(Function& F : M) {
     if(F.isDeclaration()) continue;
     
     // If there is no extra register, do nothing for the function.
@@ -46,8 +45,8 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
         if(!caller) continue;
         
         // If the sum of colors exceeds the REGISTER_CAP by inlining, do not inlining
-        Function *callee;
-        if(!(callee = caller->getCalledFunction())) continue;
+        Function *callee = caller->getCalledFunction();
+        if(!callee) continue;
         unsigned f_numColor = RG->getNumColors(callee);
         if(numColor + f_numColor > REGISTER_CAP) continue;
 
