@@ -6,7 +6,15 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: nounwind uwtable
 define dso_local i32 @main() #0 {
 ; CHECK: start main 0:
+; COM: Check if br appears only three times
 ; CHECK-NOT: add
+; CHECK: br
+; CHECK-NOT: add
+; CHECK: br
+; CHECK-NOT: add
+; CHECK: br
+; CHECK-NOT: add
+; CHECK-NOT: br
 ; CHECK: end main
 entry:
   %call = call i64 (...) @read()
