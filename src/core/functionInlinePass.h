@@ -5,16 +5,12 @@
 #include "llvm/Analysis/InlineCost.h"
 
 #include "llvm/IR/PassManager.h"
-#include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Instructions.h"
 
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 
-#include "llvm/Support/raw_ostream.h"
-
-#include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
@@ -24,7 +20,6 @@
 using namespace std;
 using namespace llvm;
 using namespace backend;
-using namespace llvm::PatternMatch;
 
 class FunctionInlinePass : public PassInfoMixin<FunctionInlinePass> {
 public:
