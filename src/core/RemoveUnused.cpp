@@ -50,7 +50,7 @@ void RemoveUnusedPass::eraseUnusedInstruction(Function &F, FunctionAnalysisManag
 
   // gather defined variables
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-    Instruction *inst = &(*I);
+    Instruction *inst = &*I;
     if (!inst->getType()->isVoidTy()) unusedInsts.push_back(inst);
   }
 
@@ -67,9 +67,9 @@ void RemoveUnusedPass::eraseUnusedInstruction(Function &F, FunctionAnalysisManag
 void RemoveUnusedPass::eraseUnloadedAlloca(Function &F, FunctionAnalysisManager &FAM) {
   vector<AllocaInst*> unloadedAllocas;
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-    Instruction *inst = &(*I);
+    Instruction *inst = &*I;
     if (AllocaInst *alloc = dyn_cast<AllocaInst>(inst)) {
-      bool isLoadExist = any_of(alloc->users(), [](User *u) {return dyn_cast<LoadInst>(u) != nullptr;});
+      bool isLoadExist = any_of(alloc->users(), [](User *u) {return isa<LoadInst>(u);});
       if (!isLoadExist) unloadedAllocas.push_back(alloc);
     }
   }

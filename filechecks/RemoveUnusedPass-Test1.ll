@@ -8,6 +8,7 @@ define dso_local i32 @main() #0 {
 ; CHECK: start main 0:
 entry:
 ; CHECK-NOT: store 4 0 sp 4
+; CHECK: sp = sub sp 4 64
   %retval = alloca i32, align 4
   %x = alloca i32, align 4
   store i32 0, i32* %retval, align 4
