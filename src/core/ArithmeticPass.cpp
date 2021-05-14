@@ -5,15 +5,15 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
   Value* FirstVal; //FirstOperand Value
   ConstantInt* ConsVal; //Constant Value
 
-  vector<Instruction *> InstRemove;// Inst to Remove
-
   for(BasicBlock &BB: F){
      
     //vectors for store change instructions.
-    vector<Instruction *> InstAdd, InstShl, InstLShr, InstAShr, InstAnd, InstAndMx;
+    vector<Instruction *> InstAdd, InstShl, InstLShr, InstAShr, InstAnd;
 
-    for(Instruction &I : BB){
-            
+    for(auto itr = BB.begin(), en = BB.end(); itr!=en; itr++){
+     
+      Instruction &I = *itr;
+
       //Case one: add X X -> mul X 2
       if(match(&I, m_Add(m_Value(FirstVal), m_Deferred(FirstVal)))){
         InstAdd.push_back(&I);
@@ -36,15 +36,15 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
 
       //Case five: and X (2^C-1) -> udiv X (2^C)
       if(match(&I, m_And(m_Value(FirstVal), m_ConstantInt(ConsVal))) || match(&I, m_And(m_ConstantInt(ConsVal), m_Value(FirstVal)))){
-        
+
         uint64_t cons = ConsVal->getZExtValue(), width = FirstVal->getType()->getIntegerBitWidth();
 
         if(cons==UINT64_MAX){
-          InstAndMx.push_back(&I);
+          ReplaceInstWithValue(BB.getInstList(),itr,FirstVal);
         } else if(width==64){
           InstAnd.push_back(&I);
         } else if((cons+1) == (1ull<<width)){
-          InstAndMx.push_back(&I);
+          ReplaceInstWithValue(BB.getInstList(),itr,FirstVal);
         } else if (cons && (! (cons & (cons+1)))) {
           InstAnd.push_back(&I);
         }
@@ -56,7 +56,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
     for(Instruction *AddI : InstAdd){
       Value* FirstOperand = AddI->getOperand(0);
       Instruction*  NewInst = BinaryOperator::Create(Instruction::Mul, FirstOperand, ConstantInt::get(FirstOperand->getType(),2));
-      ReplaceInstWithInst(AddI,NewInst);
+      ReplaceInstWithInst(AddI, NewInst);
     }
 
     //Change Instruction to mul x (1<<c)
@@ -65,7 +65,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
       ConstantInt* ShlVal = dyn_cast<ConstantInt> (ShlI->getOperand(1));
       uint32_t ushlval = ShlVal->getZExtValue();
       Instruction*  NewInst = BinaryOperator::Create(Instruction::Mul, FirstOperand, ConstantInt::get(FirstOperand->getType(),(1ull<<ushlval)));
-      ReplaceInstWithInst(ShlI,NewInst);
+      ReplaceInstWithInst(ShlI, NewInst);
     }
 
     //Change Instruction to udiv x (1<<c)
@@ -74,7 +74,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
       ConstantInt* LShrVal = dyn_cast<ConstantInt> (LShrI->getOperand(1));
       uint32_t ushrval = LShrVal->getZExtValue();
       Instruction*  NewInst = BinaryOperator::Create(Instruction::UDiv, FirstOperand,ConstantInt::get(FirstOperand->getType(),(1ull<<ushrval)));
-      ReplaceInstWithInst(LShrI,NewInst);
+      ReplaceInstWithInst(LShrI, NewInst);
     }
 
     //Change Instruction to sdiv x (1<<c)
@@ -83,7 +83,7 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
       ConstantInt* AShrVal = dyn_cast<ConstantInt> (AShrI->getOperand(1));
       uint32_t ashrval = AShrVal->getZExtValue();
       Instruction*  NewInst = BinaryOperator::Create(Instruction::SDiv, FirstOperand, ConstantInt::get(FirstOperand->getType(),(1ull<<ashrval)));
-      ReplaceInstWithInst(AShrI,NewInst);
+      ReplaceInstWithInst(AShrI, NewInst);
     }
 
     //Change Instruction to urem x (1<<c)
@@ -100,20 +100,8 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
       }
       uint64_t andval = AndVal->getZExtValue();
       Instruction* NewInst = BinaryOperator::Create(Instruction::URem, XOperand, ConstantInt::get(XOperand->getType(),(andval+1)));
-      ReplaceInstWithInst(AndI,NewInst);
+      ReplaceInstWithInst(AndI, NewInst);
     }
-
-    //Change Instruction to FirstOperand
-    for(Instruction *AndMxI : InstAndMx){
-      Value* FirstOperand = AndMxI->getOperand(0);
-      AndMxI->replaceAllUsesWith(FirstOperand);
-      InstRemove.push_back(AndMxI);
-    }
-  }
-  
-  //Remove Instructions from Parent.
-  for(Instruction *RemoveI : InstRemove){
-    RemoveI->removeFromParent();
   }
 
   return PreservedAnalyses::all();
