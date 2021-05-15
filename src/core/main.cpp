@@ -61,12 +61,14 @@ int main(int argc, char *argv[]) {
   FPM.addPass(SimplifyCFGPass());
 
   // Add IR passes
-  //FPM.addPass(MyPass());
+  FPM.addPass(ArithmeticPass());
+  FPM.addPass(RemoveUnusedPass());
 
   // Add existing IR passes
   FPM.addPass(SimplifyCFGPass());
 
   // Execute IR passes
+  MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
 
