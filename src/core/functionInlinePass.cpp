@@ -67,7 +67,7 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
 
           for(int i = st; i < do_inline.size(); ++i) {
             if(i_m == -1) i_m = i;
-            else if(do_inline[i_m].second < do_inline[i].second) i_m = st;
+            else if(do_inline[i_m].second < do_inline[i].second) i_m = i;
           }
           if(i_m != -1 && f_numColor < do_inline[i_m].second) {
             numColor += f_numColor - do_inline[i_m].second;
