@@ -17,6 +17,7 @@
 #include "../backend/LivenessAnalysis.h"
 
 #include <vector>
+#include <map>
 using namespace std;
 using namespace llvm;
 using namespace backend;

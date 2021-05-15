@@ -84,10 +84,10 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     numColors[&F] = numColor;
   }
 
-  for(CallBase *caller : do_inline) {
+  for(auto& e : do_inline) {
 
     // Inline caller without insert Lifetime
-
+    CallBase *caller = e.first;
     // llvm::InlineFunctionInfo.InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
     //                                         AAResults *CalleeAAR,
     //                                         bool InsertLifetime,
