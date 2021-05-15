@@ -19,7 +19,7 @@ PreservedAnalyses ConstExprRemovePass::run(Module& M, ModuleAnalysisManager& MAM
                     //store i32 %val, %i32* getelementptr...
                     ConstantExpr* expr = dyn_cast<ConstantExpr>(operand);
                     if(expr) {
-                        outs() << "\n";
+                        //outs() << "\n";
                         Instruction* newI = expr->getAsInstruction();
                         newI->insertBefore(&I);
                         use.set(newI);

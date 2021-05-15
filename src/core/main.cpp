@@ -58,16 +58,26 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+  // Add existing IR passes
+  FPM.addPass(SimplifyCFGPass());
+
   // Add IR passes
-  //FPM.addPass(MyPass());
   FPM.addPass(ArithmeticPass());
   FPM.addPass(RemoveUnusedPass());
+
+  // Add existing IR passes
+  FPM.addPass(SimplifyCFGPass());
+  FPM.addPass(SimplifyCFGPass());
+  FPM.addPass(SimplifyCFGPass());
+  FPM.addPass(SimplifyCFGPass());
+  FPM.addPass(SimplifyCFGPass());
+  FPM.addPass(SimplifyCFGPass());
 
   // Execute IR passes
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.addPass(FunctionInlinePass());
   MPM.run(*M, MAM);
-  
+
   // Execute backend passes
   SplitSelfLoopPass().run(*M, MAM);
   UnfoldVectorInstPass().run(*M, MAM);
