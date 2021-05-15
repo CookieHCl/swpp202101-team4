@@ -6,13 +6,14 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
   ConstantInt* ConsVal; //Constant Value
 
   for(BasicBlock &BB: F){
-     
+
     //vectors for store change instructions.
     vector<Instruction *> InstAdd, InstShl, InstLShr, InstAShr, InstAnd;
 
-    for(auto itr = BB.begin(), en = BB.end(); itr!=en; itr++){
-     
-      Instruction &I = *itr;
+    for(auto itr = BB.begin(), en = BB.end(); itr!=en;){
+
+      auto tmp_itr = itr++;
+      Instruction &I = *tmp_itr;
 
       //Case one: add X X -> mul X 2
       if(match(&I, m_Add(m_Value(FirstVal), m_Deferred(FirstVal)))){
@@ -40,11 +41,11 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
         uint64_t cons = ConsVal->getZExtValue(), width = FirstVal->getType()->getIntegerBitWidth();
 
         if(cons==UINT64_MAX){
-          ReplaceInstWithValue(BB.getInstList(),itr,FirstVal);
+          ReplaceInstWithValue(BB.getInstList(),tmp_itr,FirstVal);
         } else if(width==64){
           InstAnd.push_back(&I);
         } else if((cons+1) == (1ull<<width)){
-          ReplaceInstWithValue(BB.getInstList(),itr,FirstVal);
+          ReplaceInstWithValue(BB.getInstList(),tmp_itr,FirstVal);
         } else if (cons && (! (cons & (cons+1)))) {
           InstAnd.push_back(&I);
         }
