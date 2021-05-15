@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // Add IR passes
-  //FPM.addPass(MyPass());
+  FPM.addPass(RemoveUnusedPass());
 
   // Execute IR passes
   MPM.addPass(FunctionInlinePass());

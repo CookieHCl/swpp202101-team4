@@ -2,5 +2,6 @@
 #define TEAM4HEADER_H
 
 #include "functionInlinePass.h"
+#include "RemoveUnused.h"
 
 #endif
