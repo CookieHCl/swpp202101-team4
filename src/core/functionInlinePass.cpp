@@ -81,7 +81,7 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
       }
     }
     // update numColors
-    numColors[&F] = numColors;
+    numColors[&F] = numColor;
   }
 
   for(CallBase *caller : do_inline) {
