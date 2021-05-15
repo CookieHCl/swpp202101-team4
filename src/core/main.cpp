@@ -57,16 +57,21 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+  // Add existing IR passes
+  FPM.addPass(SimplifyCFGPass());
+
   // Add IR passes
-  //FPM.addPass(MyPass());
   FPM.addPass(ArithmeticPass());
   FPM.addPass(RemoveUnusedPass());
+
+  // Add existing IR passes
+  FPM.addPass(SimplifyCFGPass());
 
   // Execute IR passes
   MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
-  
+
   // Execute backend passes
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
