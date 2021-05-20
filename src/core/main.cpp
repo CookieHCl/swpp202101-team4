@@ -4,6 +4,7 @@
 #include "../backend/GEPUnpack.h"
 #include "../backend/RegisterSpill.h"
 #include "../backend/UnfoldVectorInst.h"
+#include "../backend/SplitSelfLoop.h"
 
 #include "Team4Header.h"
 
@@ -73,6 +74,7 @@ int main(int argc, char *argv[]) {
   MPM.run(*M, MAM);
 
   // Execute backend passes
+  SplitSelfLoopPass().run(*M, MAM);
   UnfoldVectorInstPass().run(*M, MAM);
   LivenessAnalysis().run(*M, MAM);
   SpillCostAnalysis().run(*M, MAM);

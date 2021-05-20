@@ -24,6 +24,9 @@ namespace backend {
 //backend/TargetMachine.cpp
 //---------------------------------------------------------------
 
+class Memory;
+class Register;
+
 class Symbol{
 protected:
   string name;
@@ -32,12 +35,16 @@ protected:
   Symbol(string name): name(name) {}
 public:
   string getName();
+  virtual Register* castToRegister() = 0;
+  virtual Memory* castToMemory() = 0;
 };
 //Hardware registers
 class Register : public virtual Symbol {
 public:
   Register(string name): Symbol(name) {}
   ~Register() {}
+  Register* castToRegister() {return this;}
+  Memory* castToMemory() {return NULL;}
 };
 //Memory addresses(GV, )
 class Memory : public virtual Symbol {
@@ -48,16 +55,22 @@ public:
   ~Memory() {}
   Register* getBase();
   int64_t getOffset();
+  Register* castToRegister() {return NULL;}
+  Memory* castToMemory() {return this;}
 };
 class Func : public Symbol {
 public:
   Func(string name): Symbol(name) {}
   ~Func() {}
+  Register* castToRegister() {return NULL;}
+  Memory* castToMemory() {return NULL;}
 };
 class Block : public Symbol {
 public:
   Block(string name): Symbol(name) {}
   ~Block() {}
+  Register* castToRegister() {return NULL;}
+  Memory* castToMemory() {return NULL;}
 };
 
 class TargetMachine {
