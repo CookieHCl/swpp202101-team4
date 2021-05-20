@@ -291,11 +291,17 @@ vector<Value *> RegisterGraph::PerfectEliminationOrdering(vector<Value *> &value
         Sigma.remove(set<Value *>());
     }
 
+    // construct a temporary set for instruction owner check
+    std::unordered_set<Value*> values_set(values.begin(), values.end());
+
     //reserved colors are always located at last;
     //because GreedyColoring() calls reverse(PEO.begin(), PEO.end()),
     //this reserved colors will be colored prior to other nodes
     for (auto &[I, c] : ReservedColor) {
-        PEO.push_back(I);
+        // push into PEO only if the 'reserving' instruction belongs to this function
+        if (values_set.find(I) != values_set.end()) {
+            PEO.push_back(I);
+        }
     }
     assert(PEO.size() == values.size() && "PEO should be the same size as values");
 
