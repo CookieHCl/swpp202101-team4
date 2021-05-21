@@ -45,3 +45,5 @@ Compile LLVM IR `input.ll` into an assembly `a.s` using this command:
 ```
 bin/sf-compiler input.ll a.s
 ```
+
+For more information, run `bin/sf-compiler -h`.
