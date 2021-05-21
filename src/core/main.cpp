@@ -11,6 +11,7 @@
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/IR/PassManager.h"
 
 #include <string>
@@ -18,12 +19,26 @@
 using namespace std;
 using namespace llvm;
 
+static cl::OptionCategory optCategory("SWPP Compiler options");
+
+static cl::opt<string> optInput(
+    cl::Positional, cl::desc("<input bitcode file>"), cl::Required,
+    cl::value_desc("filename"), cl::cat(optCategory));
+
+static cl::opt<string> optOutput(
+    cl::Positional, cl::desc("[output assembly file]"), cl::init("-"),
+    cl::value_desc("filename"), cl::cat(optCategory));
+
+static cl::opt<bool> optPrintProgress(
+    "verbose", cl::desc("Print detailed progress"),
+    cl::cat(optCategory));
+static cl::alias optPrintProgressA(
+    "v", cl::desc("Alias for --verbose"),
+    cl::aliasopt(optPrintProgress), cl::cat(optCategory));
+
 int main(int argc, char *argv[]) {
   //Parse command line arguments
-  if(argc!=3) return -1;
-  string optInput = argv[1];
-  string optOutput = argv[2];
-  bool optPrintProgress = false;
+  cl::ParseCommandLineOptions(argc, argv);
 
   //Parse input LLVM IR module
   LLVMContext Context;
