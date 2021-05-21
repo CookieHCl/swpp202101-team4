@@ -22,11 +22,11 @@ using namespace llvm;
 static cl::OptionCategory optCategory("SWPP Compiler options");
 
 static cl::opt<string> optInput(
-    cl::Positional, cl::desc("<input bitcode file>"), cl::Required,
+    cl::Positional, cl::desc("<input file>"), cl::Required,
     cl::value_desc("filename"), cl::cat(optCategory));
 
 static cl::opt<string> optOutput(
-    cl::Positional, cl::desc("[output assembly file]"), cl::init("-"),
+    cl::Positional, cl::desc("[output file]"), cl::init("-"),
     cl::value_desc("filename"), cl::cat(optCategory));
 
 static cl::opt<bool> optPrintProgress(
