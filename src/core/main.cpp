@@ -44,7 +44,8 @@ enum Opts {
   Arithmetic,
   FunctionInline,
   RemoveUnused,
-  SimplifyCFG
+  SimplifyCFG,
+  LoopVectorize,
 };
 
 static unsigned optOptimizationBits;
@@ -55,7 +56,8 @@ static cl::bits<Opts, unsigned> optOptimizations(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
-      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
+      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG"),
+      clEnumVal(LoopVectorize, "Vectorize load/store instruction")));
 
 #define IFSET(enum, X) if (optOptimizations.isSet(enum)) { X; }
 
@@ -112,6 +114,7 @@ int main(int argc, char *argv[]) {
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
 
   // Execute IR passes
+  IFSET(Opts::LoopVectorize, MPM.addPass(LoopVectorizePass()))
   IFSET(Opts::FunctionInline, MPM.addPass(FunctionInlinePass()))
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);

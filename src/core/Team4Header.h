@@ -9,4 +9,7 @@
 #include "FunctionInlinePass.h"
 #include "RemoveUnused.h"
 
+
+#include "LoopVectorizePass.h"
+
 #endif
