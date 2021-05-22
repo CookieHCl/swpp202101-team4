@@ -30,7 +30,7 @@ string AssemblyEmitter::emitBinary(Instruction* v, string opcode, string op1, st
     return emitInst({name(v), "=", opcode, op1, op2, stringBandWidth(v)});
 }
 string AssemblyEmitter::emitCopy(Instruction* v, Value* op) {
-    Memory* mem = dynamic_cast<Memory*>(SM->get(op));
+    Memory* mem = SM->get(op)? SM->get(op)->castToMemory() : NULL;
     if(mem) {
         if(mem->getBase() == TM->gvp()) {
             return emitBinary(v, "add", "204800", to_string(mem->getOffset()));    
@@ -98,7 +98,7 @@ void AssemblyEmitter::visitLoadInst(LoadInst& I) {
     string size = to_string(getAccessSize(dyn_cast<PointerType>(ptr->getType())->getElementType()));
     Symbol* symbol = SM->get(ptr);
     //if pointer operand is a memory value(GV or alloca),
-    if(Memory* mem = dynamic_cast<Memory*>(symbol)) {
+    if(Memory* mem = symbol->castToMemory()) {
         if(mem->getBase() == TM->sp()) {
             *fout << emitInst({name(&I), "= load", size ,"sp", to_string(mem->getOffset())});
         }
@@ -108,7 +108,7 @@ void AssemblyEmitter::visitLoadInst(LoadInst& I) {
         else assert(false && "base of memory pointers should be sp or gvp");
     }
     //else a pointer stored in register,
-    else if(Register* reg = dynamic_cast<Register*>(symbol)) {
+    else if(Register* reg = symbol->castToRegister()) {
         *fout << emitInst({name(&I), "= load", size, reg->getName(), "0"});
     }
     else assert(false && "pointer of a memory operation should have an appropriate symbol assigned");
@@ -120,7 +120,7 @@ void AssemblyEmitter::visitStoreInst(StoreInst& I) {
     Value* val = I.getValueOperand();
     Symbol* symbol = SM->get(ptr);
     //if pointer operand is a memory value(GV or alloca),
-    if(Memory* mem = dynamic_cast<Memory*>(symbol)) {
+    if(Memory* mem = symbol->castToMemory()) {
         if(mem->getBase() == TM->sp()) {
             *fout << emitInst({"store", size, name(val), "sp", to_string(mem->getOffset())});
         }
@@ -130,7 +130,7 @@ void AssemblyEmitter::visitStoreInst(StoreInst& I) {
         else assert(false && "base of memory pointers should be sp or gvp");
     }
     //else a pointer stored in register,
-    else if(Register* reg = dynamic_cast<Register*>(symbol)) {
+    else if(Register* reg = symbol->castToRegister()) {
         *fout << emitInst({"store", size, name(val),reg->getName(), "0"});
     }
     else assert(false && "pointer of a memory operation should have an appropriate symbol assigned");
@@ -167,24 +167,27 @@ void AssemblyEmitter::visitPtrToIntInst(PtrToIntInst& I) {
     Value* ptr = I.getPointerOperand();
     Symbol* symbol = SM->get(ptr);
     //if pointer operand is a memory value(GV or alloca),
-    if(Memory* mem = dynamic_cast<Memory*>(symbol)) {
-        if(mem->getBase() == TM->sp()) {
-            *fout << emitBinary(&I, "add", "sp", to_string(mem->getOffset()));
+    if(symbol) {
+        if(Memory* mem = symbol->castToMemory()) {
+            if(mem->getBase() == TM->sp()) {
+                *fout << emitBinary(&I, "add", "sp", to_string(mem->getOffset()));
+            }
+            else if(mem->getBase() == TM->gvp()) {
+                *fout << emitBinary(&I, "add", "204800", to_string(mem->getOffset()));
+            }
+            else assert(false && "base of memory pointers should be sp or gvp");
         }
-        else if(mem->getBase() == TM->gvp()) {
-            *fout << emitBinary(&I, "add", "204800", to_string(mem->getOffset()));
+        //else a pointer stored in register,
+        else if(Register* reg = symbol->castToRegister()) {
+            //if from and to values are stored in a different source, copy.
+            if(SM->get(&I) != SM->get(I.getOperand(0))) {
+                *fout << emitCopy(&I, I.getOperand(0));
+            }
         }
-        else assert(false && "base of memory pointers should be sp or gvp");
-    }
-    //else a pointer stored in register,
-    else if(Register* reg = dynamic_cast<Register*>(symbol)) {
-        //if from and to values are stored in a different source, copy.
-        if(SM->get(&I) != SM->get(I.getOperand(0))) {
-            *fout << emitCopy(&I, I.getOperand(0));
-        }
+        return;
     }
     //else ptr is null
-    else if(isa<ConstantPointerNull>(ptr)) {
+    if(isa<ConstantPointerNull>(ptr)) {
         *fout << emitBinary(&I, "mul", "0", "0");
     }
     else assert(false && "pointer of a memory operation should have an appropriate symbol assigned");

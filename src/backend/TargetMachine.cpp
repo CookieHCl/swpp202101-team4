@@ -38,20 +38,22 @@ unsigned TargetMachine::argNo(Symbol* symbol) {
     return -1;
 }
 bool TargetMachine::valid(Symbol* symbol) {
-    if(dynamic_cast<Register*>(symbol)) {
-        for(int i = 0; i < 16; i++) {
-        if(argfile[i] == symbol) return true;
+    if(symbol) {
+        if(symbol->castToRegister()) {
+            for(int i = 0; i < 16; i++) {
+            if(argfile[i] == symbol) return true;
+            }
+            for(int i = 0; i < 32; i++) {
+            if(regfile[i] == symbol) return true;
+            }
+            if(spreg == symbol) return true;
+            if(gvpreg == symbol) return true;
+            if(fakereg == symbol) return true;
         }
-        for(int i = 0; i < 32; i++) {
-        if(regfile[i] == symbol) return true;
+        //Every implicit memory addresses are expressed as a base register(sp, gvp) and offset.
+        else if(symbol->castToMemory()) {
+            return valid((symbol)->castToMemory()->getBase());
         }
-        if(spreg == symbol) return true;
-        if(gvpreg == symbol) return true;
-        if(fakereg == symbol) return true;
-    }
-    //Every implicit memory addresses are expressed as a base register(sp, gvp) and offset.
-    else if(dynamic_cast<Memory*>(symbol)) {
-        return valid(dynamic_cast<Memory*>(symbol)->getBase());
     }
     return false;
 }

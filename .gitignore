@@ -38,9 +38,6 @@ Makefile
 obj
 bin
 
-# Test files
-test
-
 # Created by https://www.toptal.com/developers/gitignore/api/clion,vscode
 # Edit at https://www.toptal.com/developers/gitignore?templates=clion,vscode
 
