@@ -122,6 +122,7 @@ define dso_local i64 @f2(i64 %0) #0 {
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @main() #0 {
+;   CHECK:      sp = sub sp 28 64
 ;   CHECK:      call recfibo
 ;   CHECK-NOT:	call max
   %1 = alloca i32, align 4
