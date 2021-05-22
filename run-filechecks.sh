@@ -5,13 +5,19 @@ if [ "$#" -ne 1 ]; then
   exit 1
 fi
 
-mkdir -p test
-
-echo "--- Start FileCheck.. ---"
+echo "--- Start FileCheck ---"
 set -e
 
 for i in `find ./filechecks -name "*.ll"` ; do
-  echo "--- $i ---"
-  bin/sf-compiler $i test/tmp.s
-  $1 $i < test/tmp.s
+  opt=${i%Pass*}
+  if [ "$opt" = "$i" ]; then
+    echo "$i: Test all optimizations..."
+    bin/sf-compiler $i | $1 $i
+  else
+    opt=`basename $opt`
+    echo "$i: Test $opt optimization..."
+    bin/sf-compiler --passes=$opt $i | $1 $i
+  fi
 done
+
+echo "--- Finished FileCheck ---"
