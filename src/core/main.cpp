@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
   FPM.addPass(RemoveUnusedPass());
 
   // Execute IR passes
-  MPM.addPass(FunctionInlinePass());
+  // MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
 
