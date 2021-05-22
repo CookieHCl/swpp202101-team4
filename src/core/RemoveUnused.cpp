@@ -5,15 +5,7 @@
   It reduces cost caused by unused calculation.
 */
 
-template<typename Iter>
-void RemoveUnusedPass::printValues(Iter &iter, string str) {
-  outs() << str << " START\n";
-  for (Value *v : iter)
-    outs() << *v << "\n";
-  outs() << str << " END\n";
-}
-
-vector<BasicBlock*> RemoveUnusedPass::getUnreachableBBs(Function &F, FunctionAnalysisManager &FAM) {
+vector<BasicBlock*> RemoveUnusedPass::getUnreachableBB(Function &F, FunctionAnalysisManager &FAM) {
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   vector<BasicBlock*> unreachableBBs;
   for (BasicBlock &BB : F)
@@ -22,14 +14,15 @@ vector<BasicBlock*> RemoveUnusedPass::getUnreachableBBs(Function &F, FunctionAna
   return unreachableBBs;
 }
 
-void RemoveUnusedPass::eraseUnreachableBBs(Function &F, FunctionAnalysisManager &FAM) {
-  auto unreachables = this->getUnreachableBBs(F, FAM);
+void RemoveUnusedPass::eraseUnreachableBB(Function &F, FunctionAnalysisManager &FAM) {
+  auto unreachables = this->getUnreachableBB(F, FAM);
 
   for (BasicBlock *BB : unreachables) {
     for (BasicBlock *succ : successors(BB))
       succ->removePredecessor(BB);
-    for (Instruction &inst : *BB)
+    for (Instruction &inst : *BB) {
       if (!inst.use_empty()) inst.dropAllReferences();
+    }
     BB->getInstList().clear();
   }
 
@@ -37,7 +30,7 @@ void RemoveUnusedPass::eraseUnreachableBBs(Function &F, FunctionAnalysisManager 
     BB->eraseFromParent();
 }
 
-void RemoveUnusedPass::eraseUnusedInstructions(Function &F, FunctionAnalysisManager &FAM) {
+void RemoveUnusedPass::eraseUnusedInstruction(Function &F, FunctionAnalysisManager &FAM) {
   SmallPtrSet<Value*, 16> usedValues = this->getUsedValues(F);
   SmallPtrSet<Instruction*, 16> unusedInsts;
 
@@ -196,7 +189,7 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getUsedValues(Function &F) {
 }
 
 PreservedAnalyses RemoveUnusedPass::run(Function &F, FunctionAnalysisManager &FAM) {
-  this->eraseUnreachableBBs(F, FAM);
-  this->eraseUnusedInstructions(F, FAM);
+  this->eraseUnreachableBB(F, FAM);
+  this->eraseUnusedInstruction(F, FAM);
   return PreservedAnalyses::all();
 }
