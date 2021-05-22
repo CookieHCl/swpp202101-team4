@@ -70,16 +70,13 @@ SmallPtrSet<GlobalValue*, 16> RemoveUnusedPass::getGloalValues(Function &F) {
   return globalValues;
 }
 
-SmallPtrSet<Value*, 16> RemoveUnusedPass::getRecursiveNonControlFlowValues(Value *v, SmallPtrSet<Value*, 16> &checked) {
+template<typename Lambda>
+SmallPtrSet<Value*, 16> RemoveUnusedPass::getRecursiveUsers(Value *v, SmallPtrSet<Value*, 16> &checked, Lambda condition) {
   SmallPtrSet<Value*, 16> nonInst;
-  for (User *u : v->users())
-    if (!checked.count(u)) {
-      checked.insert(u);
-      if (!isa<Instruction>(u) && !isa<BasicBlock>(u)) {
-        nonInst.insert(u);
-        set_union(nonInst, this->getRecursiveNonControlFlowValues(u, checked));
-      }
-    }
+  checked.insert(v);
+  if (condition(v)) nonInst.insert(v);
+  for (User *u : v->users()) 
+    if (!checked.count(u)) set_union(nonInst, this->getRecursiveUsers(u, checked, condition));      
   return nonInst;
 }
 
@@ -87,15 +84,31 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getNecessaryValues(Function &F) {
   SmallPtrSet<Value*, 16> necessaryValues;
 
   // Contain GlobalValue and related Non-ControlFlow values
-  for (GlobalValue *gv : this->getGloalValues(F)) {
-    necessaryValues.insert(gv);
-    SmallPtrSet<Value*, 16> checked;
-    set_union(necessaryValues, this->getRecursiveNonControlFlowValues(gv, checked));
-  }
+  set_union(necessaryValues, this->getGloalValues(F));
 
   // Contain Arguments
   for (Argument &arg : F.args()) necessaryValues.insert(&arg);
 
+  SmallPtrSet<Value*, 16> prevNecessaryValues;
+  do {
+    set_union(prevNecessaryValues, necessaryValues);
+    for (Value *v : prevNecessaryValues) {
+      SmallPtrSet<Value*, 16> checked;
+      set_union(necessaryValues, this->getRecursiveUsers(v, checked, [](Value *u) { 
+        Instruction *inst = dyn_cast<Instruction>(u);
+        if (inst && !inst->mayHaveSideEffects()) return false;
+        StoreInst *sInst = dyn_cast<StoreInst>(u);
+        // due to next line, the case casting integer argument to pointer do not work.
+        if (sInst && !sInst->getValueOperand()->getType()->isPointerTy()) return false;
+        return !isa<BasicBlock>(u);
+      }));
+      Instruction *inst = dyn_cast<Instruction>(v);
+
+      if (inst && inst->mayHaveSideEffects())
+        for (Value *op : inst->operands())
+          necessaryValues.insert(op);
+    }
+  } while (prevNecessaryValues.size() != necessaryValues.size());
 
   // Contain unsafe to remove values except store instruction
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {

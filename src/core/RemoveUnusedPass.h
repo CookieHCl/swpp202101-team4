@@ -18,7 +18,7 @@ private:
   SmallPtrSet<Value*, 16> getNecessaryValues(Function &F);
   bool isNecessaryInst(Instruction *inst, SmallPtrSet<Value*, 16> &necessarySet);
   SmallPtrSet<Instruction*, 16> getSideEffectsInst(Function &F);
-  SmallPtrSet<Value*, 16> getRecursiveNonControlFlowValues(Value *v, SmallPtrSet<Value*, 16> &checked);
+  template<typename Lambda> SmallPtrSet<Value*, 16> getRecursiveUsers(Value *v, SmallPtrSet<Value*, 16> &checked, Lambda condition);
 
 public:
   template<typename Lambda1, typename Lambda2> 
