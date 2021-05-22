@@ -13,6 +13,7 @@
 
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 #include "../backend/LivenessAnalysis.h"
 
