@@ -3,6 +3,7 @@
 
 // Existing passes
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 
 // IR passes
 #include "Arithmeticpass.h"

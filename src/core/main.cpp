@@ -44,7 +44,8 @@ enum Opts {
   Arithmetic,
   FunctionInline,
   RemoveUnused,
-  SimplifyCFG
+  SimplifyCFG,
+  Gvn
 };
 
 static unsigned optOptimizationBits;
@@ -55,7 +56,8 @@ static cl::bits<Opts, unsigned> optOptimizations(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
-      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
+      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG"),
+      clEnumVal(Gvn, "Constant folding & eliminate fully redundant instructions and dead load")));
 
 #define IFSET(enum, X) if (optOptimizations.isSet(enum)) { X; }
 
@@ -103,6 +105,7 @@ int main(int argc, char *argv[]) {
 
   // Add existing IR passes
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(Opts::Gvn, FPM.addPass(GVN()))
 
   // Add IR passes
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
@@ -110,6 +113,7 @@ int main(int argc, char *argv[]) {
 
   // Add existing IR passes
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(Opts::Gvn, FPM.addPass(GVN()))
 
   // Execute IR passes
   IFSET(Opts::FunctionInline, MPM.addPass(FunctionInlinePass()))
