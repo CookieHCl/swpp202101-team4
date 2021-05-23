@@ -42,10 +42,10 @@ static cl::opt<bool> optEmitLLVM(
 
 enum Opts {
   Arithmetic,
+  Gvn,
   FunctionInline,
   RemoveUnused,
-  SimplifyCFG,
-  Gvn
+  SimplifyCFG
 };
 
 static unsigned optOptimizationBits;
