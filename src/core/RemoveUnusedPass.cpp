@@ -14,7 +14,7 @@ vector<BasicBlock*> RemoveUnusedPass::getUnreachableBB(Function &F, FunctionAnal
   return unreachableBBs;
 }
 
-void RemoveUnusedPass::eraseUnreachableBB(Function &F, FunctionAnalysisManager &FAM) {
+bool RemoveUnusedPass::eraseUnreachableBB(Function &F, FunctionAnalysisManager &FAM) {
   auto unreachables = this->getUnreachableBB(F, FAM);
 
   for (BasicBlock *BB : unreachables) {
@@ -28,9 +28,11 @@ void RemoveUnusedPass::eraseUnreachableBB(Function &F, FunctionAnalysisManager &
 
   for (BasicBlock *BB : unreachables)
     BB->eraseFromParent();
+
+  return !unreachables.empty();
 }
 
-void RemoveUnusedPass::eraseUnusedInstruction(Function &F, FunctionAnalysisManager &FAM) {
+bool RemoveUnusedPass::eraseUnusedInstruction(Function &F, FunctionAnalysisManager &FAM) {
   SmallPtrSet<Value*, 16> usedValues = this->getUsedValues(F);
   SmallPtrSet<Instruction*, 16> unusedInsts;
 
@@ -39,6 +41,8 @@ void RemoveUnusedPass::eraseUnusedInstruction(Function &F, FunctionAnalysisManag
     if (!usedValues.count(inst)) unusedInsts.insert(inst);
   }
   this->eraseInstructions(unusedInsts);
+
+  return !unusedInsts.empty();
 }
 
 void RemoveUnusedPass::eraseInstructions(SmallPtrSet<Instruction*, 16> insts) {
@@ -94,21 +98,22 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getNecessaryValues(Function &F) {
     set_union(prevNecessaryValues, necessaryValues);
     for (Value *v : prevNecessaryValues) {
       SmallPtrSet<Value*, 16> checked;
-      set_union(necessaryValues, this->getRecursiveUsers(v, checked, [](Value *u) { 
-        Instruction *inst = dyn_cast<Instruction>(u);
-        if (inst && !inst->mayHaveSideEffects()) return false;
-        StoreInst *sInst = dyn_cast<StoreInst>(u);
-        // due to next line, the case casting integer argument to pointer do not work.
-        if (sInst && !sInst->getValueOperand()->getType()->isPointerTy()) return false;
-        return !isa<BasicBlock>(u);
-      }));
+      set_union(necessaryValues, this->getRecursiveUsers(v, checked, [](Value *u) { return !isa<BasicBlock>(u); }));
       Instruction *inst = dyn_cast<Instruction>(v);
-
       if (inst && inst->mayHaveSideEffects())
         for (Value *op : inst->operands())
           necessaryValues.insert(op);
     }
   } while (prevNecessaryValues.size() != necessaryValues.size());
+
+  necessaryValues.clear();
+  for (Value *v : prevNecessaryValues) {
+    Instruction *inst = dyn_cast<Instruction>(v);
+    if (inst && !inst->mayHaveSideEffects()) continue;
+    StoreInst *sInst = dyn_cast<StoreInst>(v);
+    if (sInst && !sInst->getValueOperand()->getType()->isPointerTy()) continue;
+    necessaryValues.insert(v);
+  }
 
   // Contain unsafe to remove values except store instruction
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
@@ -202,7 +207,7 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getUsedValues(Function &F) {
 }
 
 PreservedAnalyses RemoveUnusedPass::run(Function &F, FunctionAnalysisManager &FAM) {
-  this->eraseUnreachableBB(F, FAM);
-  this->eraseUnusedInstruction(F, FAM);
-  return PreservedAnalyses::all();
+  bool isUnreachableExist = this->eraseUnreachableBB(F, FAM);
+  bool isUnusedExist = this->eraseUnusedInstruction(F, FAM);
+  return isUnreachableExist || isUnusedExist ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
