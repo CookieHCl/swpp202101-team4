@@ -104,5 +104,5 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     InlineFunction(*caller, IFI, nullptr, false, nullptr);
   }
 
-  return PreservedAnalyses::all();
+  return PreservedAnalyses::none();
 }
