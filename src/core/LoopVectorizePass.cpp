@@ -131,16 +131,12 @@ PreservedAnalyses LoopVectorizePass::vectorize(Loop *L, LoopInfo &LI, ScalarEvol
   Induction induction = this->getInduction(L, LI);
   if (induction.v == nullptr) return PreservedAnalyses::all();
 
-  outs() << "Induction : " << *induction.v <<'\n';
-
   
   for (BasicBlock *BB : L->getBlocksVector()) {
     SmallVector<Instruction*, 16> ptrs = this->getInductionPtrs(BB, induction.v);
     if (!ptrs.empty()) {
-      
+
     }
-    for (Value *v : ptrs)
-      outs() << *v;
   }
 
       
