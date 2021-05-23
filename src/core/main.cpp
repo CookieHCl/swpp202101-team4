@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
 
   // Add IR passes
-  IFSET(Opts::BranchPredict, FPM.addPass(BranchPredictPass()))
+  IFSET(Opts::BranchPredict, FPM.addPass(BranchPredictPass(optPrintProgress)))
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
   IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
 
