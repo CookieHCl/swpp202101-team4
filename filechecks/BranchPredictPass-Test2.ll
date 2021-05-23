@@ -9,49 +9,48 @@ define dso_local i32 @main() #0 {
 ; CHECK: icmp sgt
 ; CHECK: br {{.*}} .for.cond.cleanup .for.body
 ; CHECK: icmp sgt
-; CHECK: br {{.*}} .for.cond.cleanup4 .for.body5
+; CHECK: br {{.*}} .for.cond.cleanup3 .for.body4
 ; CHECK: end main
 entry:
   %call = call i64 (...) @read()
-  %call1 = call i64 (...) @read()
   br label %for.cond
 
-for.cond:                                         ; preds = %for.inc6, %entry
-  %i.0 = phi i64 [ 1, %entry ], [ %inc7, %for.inc6 ]
+for.cond:                                         ; preds = %for.inc5, %entry
+  %i.0 = phi i64 [ 1, %entry ], [ %inc6, %for.inc5 ]
   %cmp = icmp sle i64 %i.0, %call
   br i1 %cmp, label %for.body, label %for.cond.cleanup
 
 for.cond.cleanup:                                 ; preds = %for.cond
-  br label %for.end8
+  br label %for.end7
 
 for.body:                                         ; preds = %for.cond
-  br label %for.cond2
+  br label %for.cond1
 
-for.cond2:                                        ; preds = %for.inc, %for.body
+for.cond1:                                        ; preds = %for.inc, %for.body
   %j.0 = phi i64 [ 1, %for.body ], [ %inc, %for.inc ]
-  %cmp3 = icmp sle i64 %j.0, %call
-  br i1 %cmp3, label %for.body5, label %for.cond.cleanup4
+  %cmp2 = icmp sle i64 %j.0, %call
+  br i1 %cmp2, label %for.body4, label %for.cond.cleanup3
 
-for.cond.cleanup4:                                ; preds = %for.cond2
+for.cond.cleanup3:                                ; preds = %for.cond1
   br label %for.end
 
-for.body5:                                        ; preds = %for.cond2
+for.body4:                                        ; preds = %for.cond1
   %mul = mul nsw i64 %i.0, %j.0
   call void @write(i64 %mul)
   br label %for.inc
 
-for.inc:                                          ; preds = %for.body5
+for.inc:                                          ; preds = %for.body4
   %inc = add nsw i64 %j.0, 1
-  br label %for.cond2, !llvm.loop !2
+  br label %for.cond1, !llvm.loop !2
 
-for.end:                                          ; preds = %for.cond.cleanup4
-  br label %for.inc6
+for.end:                                          ; preds = %for.cond.cleanup3
+  br label %for.inc5
 
-for.inc6:                                         ; preds = %for.end
-  %inc7 = add nsw i64 %i.0, 1
+for.inc5:                                         ; preds = %for.end
+  %inc6 = add nsw i64 %i.0, 1
   br label %for.cond, !llvm.loop !5
 
-for.end8:                                         ; preds = %for.cond.cleanup
+for.end7:                                         ; preds = %for.cond.cleanup
   ret i32 0
 }
 
