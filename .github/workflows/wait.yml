@@ -1,0 +1,21 @@
+name: Wait for benchmark cost
+
+on:
+  pull_request:
+  check_suite:
+    type: ['completed']
+
+jobs:
+  wait:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: wait
+        uses: fountainhead/action-wait-for-check@v1.0.0
+        id: wait-benchmark
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: run-benchmarks
+          timeoutSeconds: 15
+      - name: check output
+        run: [[ ${{ steps.wait-benchmark.outputs }} == "success" ]] && exit 0 || exit 1
