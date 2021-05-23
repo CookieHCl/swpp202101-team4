@@ -1,25 +1,26 @@
 #include "Team4Header.h"
 
+void LoopVectorizePass::setVectorSetting(Module &M) {
+  LLVMContext &context = M.getContext();
+  this->Int64Type = Type::getInt64Ty(context);
+  this->Int64PtrType = Type::getInt64PtrTy(context);
+  this->Vec2Int64Type = VectorType::get(this->Int64Type, 2, false);
+  this->Vec4Int64Type = VectorType::get(this->Int64Type, 4, false);
+  this->Vec8Int64Type = VectorType::get(this->Int64Type, 8, false);
+  Type *voidType = Type::getVoidTy(context);
 
-void print(Function &F) {
-  outs() << F;
+  DECLARE_VECTOR_FUNCTION("extract_element2", Int64Type, ArrayRef<Type*>({Vec2Int64Type, Int64Type}), M);
+  DECLARE_VECTOR_FUNCTION("extract_element4", Int64Type, ArrayRef<Type*>({Vec4Int64Type, Int64Type}), M);
+  DECLARE_VECTOR_FUNCTION("extract_element8", Int64Type, ArrayRef<Type*>({Vec8Int64Type, Int64Type}), M);
+  DECLARE_VECTOR_FUNCTION("vload2", Vec2Int64Type, ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
+  DECLARE_VECTOR_FUNCTION("vload4", Vec4Int64Type, ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
+  DECLARE_VECTOR_FUNCTION("vload8", Vec8Int64Type, ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
+  DECLARE_VECTOR_FUNCTION("vstore2", voidType, ArrayRef<Type*>({LVTWO(Int64Type), Int64PtrType, Int64Type}), M);
+  DECLARE_VECTOR_FUNCTION("vstore4", voidType, ArrayRef<Type*>({LVTWO(LVTWO(Int64Type)), Int64PtrType, Int64Type}), M);
+  DECLARE_VECTOR_FUNCTION("vstore8", voidType, ArrayRef<Type*>({LVTWO(LVTWO(LVTWO(Int64Type))), Int64PtrType, Int64Type}), M);
 }
-
-
-void createDeclaration(Module &M) {
-  auto &context = M.getContext();
-  Type *intType = Type::getInt64Ty(context);
-  unsigned eq = 2;
-  VectorType *vt = VectorType::get(intType, 2, false);
-  Twine name = Twine("vload2");
-  GlobalValue::LinkageTypes linkage = GlobalValue::ExternalLinkage;
-  FunctionType *ft = FunctionType::get(vt, ArrayRef<Type*>({intType, intType}), false);
-  Function *f = Function::Create(ft, linkage, 0, Twine("vload2"), &M);
-  outs() << *f;
-}
-
 
 PreservedAnalyses LoopVectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {
-  createDeclaration(M);
+  this->setVectorSetting(M);
   return PreservedAnalyses::all();
 }
