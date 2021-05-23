@@ -7,6 +7,7 @@
 // IR passes
 #include "Arithmeticpass.h"
 #include "FunctionInlinePass.h"
+#include "PhierasePass.h"
 #include "RemoveUnused.h"
 
 #endif
