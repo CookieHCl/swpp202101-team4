@@ -1,4 +1,4 @@
-#include "Team4Header.h"
+#include "LoopVectorizePass.h"
   
 
 /*
@@ -35,6 +35,10 @@ LoopVectorizePass::LoopVectorizePass(Module &M) : PassInfoMixin() {
 PreservedAnalyses LoopVectorizePass::run(Function &F, FunctionAnalysisManager &FAM) {
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   LoopAnalysisManager &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+
+  for (Loop *L : LI.getLoopsInPreorder()) {
+    outs() << "LOOP\n"<< *L << "\n";
+  }
 
   return PreservedAnalyses::all();
 }
