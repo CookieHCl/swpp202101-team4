@@ -1,0 +1,8 @@
+commit,avg,input1.txt,input2.txt,input3.txt,input4.txt,input5.txt,input6.txt,input7.txt
+Add CI for build and filechecks (#3),196.82857142857145,49.4,548.2,135.4,15.0,32.2,290.2,307.4
+Function inline pass (#7),193.82857142857145,46.4,545.2,132.4,12.0,29.2,287.2,304.4
+RemoveUnusedPass (#10),193.82857142857145,46.4,545.2,132.4,12.0,29.2,287.2,304.4
+Arithmetic pass (#8),193.82857142857145,46.4,545.2,132.4,12.0,29.2,287.2,304.4
+Add SimplifyCFGPass (#9),193.82857142857145,46.4,545.2,132.4,12.0,29.2,287.2,304.4
+Update skeleton code from https://github.com/snu-sf-class/swpp202101-compiler,193.82857142857145,46.4,545.2,132.4,12.0,29.2,287.2,304.4
+Support compiler options (#17),193.82857142857145,46.4,545.2,132.4,12.0,29.2,287.2,304.4
