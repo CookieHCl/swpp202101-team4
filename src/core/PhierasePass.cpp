@@ -9,6 +9,7 @@ PreservedAnalyses PhierasePass::run(Function &F, FunctionAnalysisManager &FAM){
 
     Instruction* Cur_Terminator = BB.getTerminator();
 
+    //now, phinode erase for terminator is ret. because other case( for exampe, loop ), it is not safe to change.
     if((&(*BB.begin()))==BB.getFirstNonPHI()||(!isa<ReturnInst>(Cur_Terminator))){
       continue;
     }
@@ -19,7 +20,7 @@ PreservedAnalyses PhierasePass::run(Function &F, FunctionAnalysisManager &FAM){
 
       ValueToValueMapTy VM;
 
-      BasicBlock* C_BB = CloneBasicBlock(&BB,VM);
+      BasicBlock* C_BB = CloneBasicBlock(&BB,VM); //cloning basicblock.
 
       for(auto itr = C_BB->begin(), e = C_BB->end(); itr!=e;){
         auto tmp_itr = itr++;
@@ -32,7 +33,7 @@ PreservedAnalyses PhierasePass::run(Function &F, FunctionAnalysisManager &FAM){
             BasicBlock* Cur_BB = Phi->getIncomingBlock(i);
             if(Cur_BB==pre_BB){
               Value* CurVal = Phi->getOperand(i);
-              ReplaceInstWithValue(C_BB->getInstList(),tmp_itr,CurVal);
+              ReplaceInstWithValue(C_BB->getInstList(),tmp_itr,CurVal); //replace original instruction to modfied value.
             }
           }
         }
@@ -53,14 +54,14 @@ PreservedAnalyses PhierasePass::run(Function &F, FunctionAnalysisManager &FAM){
 
       for(unsigned int i = 0; i<pre_terminator->getNumSuccessors(); ++i){
         BasicBlock* cur_successor = pre_terminator->getSuccessor(i);
-        if(cur_successor==(&BB)){
+        if(cur_successor==(&BB)){//change successor.
           pre_terminator->setSuccessor(i,C_BB);
         }
       }
 
     }
 
-    BB.eraseFromParent();
+    BB.eraseFromParent(); //old basicblock should be deleted.
   }
 
   return PreservedAnalyses::none();
