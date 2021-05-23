@@ -3,16 +3,23 @@ source_filename = "foo.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
 
-define i32 @f(i32 %x) {
-; CHECK: ret arg1
-    %y = mul i32 %x, 0
-    %res = add i32 %x,%y
-    ret i32 %res
+; Function Attrs: noinline nounwind optnone uwtable
+define dso_local i32 @f(i32 %0, i32 %1) #0 {
+; CHECK-NOT: load 4 sp 4
+  %3 = alloca i32, align 4
+  %4 = alloca i32, align 4
+  store i32 %0, i32* %3, align 4
+  store i32 %1, i32* %4, align 4
+  %5 = load i32, i32* %3, align 4
+  %6 = load i32, i32* %4, align 4
+  %7 = add nsw i32 %5, 11
+  %8 = add nsw i32 %7, 14
+  ret i32 %8
 }
 
-
+; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @main() #0 {
-  %1 = call i32 @f(i32 10)
+  %1 = call i32 @f(i32 10, i32 20)
   ret i32 0
 }
 
