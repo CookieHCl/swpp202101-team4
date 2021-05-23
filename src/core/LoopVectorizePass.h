@@ -34,8 +34,8 @@ private:
   Type *Vec8Int64Type;
   void setVectorSetting(Module &M);
 public:
+  PreservedAnalyses vectorize(Function &F, FunctionAnalysisManager &FAM);
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
-
 };
 
 

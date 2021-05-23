@@ -20,7 +20,16 @@ void LoopVectorizePass::setVectorSetting(Module &M) {
   DECLARE_VECTOR_FUNCTION("vstore8", voidType, ArrayRef<Type*>({LVTWO(LVTWO(LVTWO(Int64Type))), Int64PtrType, Int64Type}), M);
 }
 
+PreservedAnalyses LoopVectorizePass::vectorize(Function &F, FunctionAnalysisManager &FAM) {
+
+  return PreservedAnalyses::all();
+}
+
 PreservedAnalyses LoopVectorizePass::run(Module &M, ModuleAnalysisManager &MAM) {
   this->setVectorSetting(M);
+  FunctionAnalysisManager &FAM = MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+  for (Function &F : M) {
+    this->vectorize(F, FAM);
+  }
   return PreservedAnalyses::all();
 }
