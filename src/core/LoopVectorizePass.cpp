@@ -77,8 +77,9 @@ SmallVector<Instruction*, 16> LoopVectorizePass::getInductionPtrs(BasicBlock *BB
     Instruction *lInst2;
     if (lInst && (GED = dyn_cast<GetElementPtrInst>(lInst->getPointerOperand()))) {
       if ((ptr = dyn_cast<LoadInst>(GED->getPointerOperand())) && 
-          match(GED->getOperand(1), m_SExt(m_Add(m_Instruction(lInst2), m_Value(c)))))
-        outs() << "WOW\n";
+          match(GED->getOperand(1), m_SExt(m_Add(m_Instruction(lInst2), m_Value(c))))) {
+        indPtrs.push_back(lInst);
+      }
     }
   }
   return indPtrs;
@@ -114,10 +115,10 @@ LoopVectorizePass::Induction LoopVectorizePass::getInduction(Loop *L, LoopInfo &
     if (match(inst, m_Br(m_ICmp(pred, m_Value(x), m_Value(y)), bb_true, bb_false))) {
       LoadInst *lInst = dyn_cast<LoadInst>(x);
       int num;
-      if (lInst && (num = this->numInduction(lInst->getPointerOperand()))) induction = Induction(x, num);
+      if (lInst && (num = this->numInduction(lInst->getPointerOperand()))) induction = Induction(lInst->getPointerOperand(), num);
       lInst = dyn_cast<LoadInst>(y);
       if (lInst && (num = this->numInduction(lInst->getPointerOperand()))) {
-        if (induction.v == nullptr) induction = Induction(x, num);
+        if (induction.v == nullptr) induction = Induction(lInst->getPointerOperand(), num);
         else induction = Induction(nullptr, 0);
       }
     }
@@ -129,12 +130,20 @@ LoopVectorizePass::Induction LoopVectorizePass::getInduction(Loop *L, LoopInfo &
 PreservedAnalyses LoopVectorizePass::vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE) {
   Induction induction = this->getInduction(L, LI);
   if (induction.v == nullptr) return PreservedAnalyses::all();
-  SmallVector<BasicBlock*, 16> BBs;
-  L->getExitingBlocks(BBs);
 
-  for (BasicBlock *BB : BBs)
-    for (Value *v : this->getInductionPtrs(BB, induction.v))
+  outs() << "Induction : " << *induction.v <<'\n';
+
+  
+  for (BasicBlock *BB : L->getBlocksVector()) {
+    SmallVector<Instruction*, 16> ptrs = this->getInductionPtrs(BB, induction.v);
+    if (!ptrs.empty()) {
+      
+    }
+    for (Value *v : ptrs)
       outs() << *v;
+  }
+
+      
 
   return PreservedAnalyses::all();
 }
