@@ -20,7 +20,7 @@ while.cond:                                       ; preds = %if.end19, %entry
   %0 = or i1 %cmp, %cmp1
   br i1 %0, label %while.body, label %while.end
 
-while.body:                                       ; preds = %lor.end
+while.body:                                       ; preds = %while.cond
   %cmp2 = icmp sge i64 %i.0, 10
   br i1 %cmp2, label %if.then, label %if.else
 
@@ -75,7 +75,7 @@ if.end19:                                         ; preds = %if.end18, %if.then
   %i.3 = phi i64 [ %i.0, %if.then ], [ %i.2, %if.end18 ]
   br label %while.cond, !llvm.loop !2
 
-while.end:                                        ; preds = %lor.end
+while.end:                                        ; preds = %while.cond
   ret i32 0
 }
 
