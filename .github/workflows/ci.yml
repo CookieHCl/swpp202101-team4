@@ -1,0 +1,28 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: docker.pkg.github.com/cookiehcl/swpp202101-team4/swpp202101-ci
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: configure Makefile
+        run: ./configure.sh $LLVM_DIR
+      - name: make
+        run: make
+      - name: test
+        run: |
+          make test
+          ./run-benchmarks.sh $INTERPRETER $BENCHMARK_DIR
