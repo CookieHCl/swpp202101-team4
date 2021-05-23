@@ -108,13 +108,13 @@ int main(int argc, char *argv[]) {
 
   // Add IR passes
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
+  IFSET(Opts::LoopVectorize, FPM.addPass(LoopVectorizePass(*M)))
   IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
 
   // Add existing IR passes
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
 
   // Execute IR passes
-  IFSET(Opts::LoopVectorize, MPM.addPass(LoopVectorizePass()))
   IFSET(Opts::FunctionInline, MPM.addPass(FunctionInlinePass()))
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
