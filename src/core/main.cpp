@@ -42,6 +42,7 @@ static cl::opt<bool> optEmitLLVM(
 
 enum Opts {
   Arithmetic,
+  BranchPredict,
   FunctionInline,
   RemoveUnused,
   SimplifyCFG
@@ -53,6 +54,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
     cl::location(optOptimizationBits), cl::CommaSeparated, cl::cat(optCategory),
     cl::values(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
+      clEnumVal(BranchPredict, "Set most used branch to false branch"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
       clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
@@ -105,6 +107,7 @@ int main(int argc, char *argv[]) {
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
 
   // Add IR passes
+  IFSET(Opts::BranchPredict, FPM.addPass(BranchPredictPass()))
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
   IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
 
