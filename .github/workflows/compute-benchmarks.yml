@@ -27,12 +27,12 @@ jobs:
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions"
           git checkout BENCHMARK_COSTS
-          git merge main -m "${{ github.event.commits[0].message }}"
+          git merge -X theirs main -m "${{ github.event.commits[0].message }}"
       - name: compute benchmarks
         run: python3 compute-benchmarks.py $INTERPRETER $BENCHMARK_DIR
       - name: commit
         run: |
-          rm -rf .github
+          rm -rf .github/workflows/
           git add .
           git commit --amend -m "Update benchmarks costs" -m "${{ github.event.commits[0].message }}"
           git push
