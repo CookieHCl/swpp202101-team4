@@ -20,15 +20,15 @@ LoopVectorizePass::LoopVectorizePass(Module &M) : PassInfoMixin() {
   this->Vec8Int64Type = VectorType::get(this->Int64Type, 8, false);
   this->VoidType = Type::getVoidTy(context);
 
-  DECLARE_VECTOR_FUNCTION(Int64Type, "extract_element2", ArrayRef<Type*>({Vec2Int64Type, Int64Type}), M);
-  DECLARE_VECTOR_FUNCTION(Int64Type, "extract_element4", ArrayRef<Type*>({Vec4Int64Type, Int64Type}), M);
-  DECLARE_VECTOR_FUNCTION(Int64Type, "extract_element8", ArrayRef<Type*>({Vec8Int64Type, Int64Type}), M);
-  DECLARE_VECTOR_FUNCTION(Vec2Int64Type, "vload2", ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
-  DECLARE_VECTOR_FUNCTION(Vec4Int64Type, "vload4", ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
-  DECLARE_VECTOR_FUNCTION(Vec8Int64Type, "vload8", ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
-  DECLARE_VECTOR_FUNCTION(VoidType, "vstore2", ArrayRef<Type*>({LVTWO(Int64Type), Int64PtrType, Int64Type}), M);
-  DECLARE_VECTOR_FUNCTION(VoidType, "vstore4", ArrayRef<Type*>({LVTWO(LVTWO(Int64Type)), Int64PtrType, Int64Type}), M);
-  DECLARE_VECTOR_FUNCTION(VoidType, "vstore8", ArrayRef<Type*>({LVTWO(LVTWO(LVTWO(Int64Type))), Int64PtrType, Int64Type}), M);
+  extractElement2 = DECLARE_VECTOR_FUNCTION(Int64Type, "extract_element2", ArrayRef<Type*>({Vec2Int64Type, Int64Type}), M);
+  extractElement4 = DECLARE_VECTOR_FUNCTION(Int64Type, "extract_element4", ArrayRef<Type*>({Vec4Int64Type, Int64Type}), M);
+  extractElement8 = DECLARE_VECTOR_FUNCTION(Int64Type, "extract_element8", ArrayRef<Type*>({Vec8Int64Type, Int64Type}), M);
+  vLoad2 = DECLARE_VECTOR_FUNCTION(Vec2Int64Type, "vload2", ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
+  vLoad4 = DECLARE_VECTOR_FUNCTION(Vec4Int64Type, "vload4", ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
+  vLoad8 = DECLARE_VECTOR_FUNCTION(Vec8Int64Type, "vload8", ArrayRef<Type*>({Int64PtrType, Int64Type}), M);
+  vStore2 = DECLARE_VECTOR_FUNCTION(VoidType, "vstore2", ArrayRef<Type*>({LVTWO(Int64Type), Int64PtrType, Int64Type}), M);
+  vStore4 = DECLARE_VECTOR_FUNCTION(VoidType, "vstore4", ArrayRef<Type*>({LVTWO(LVTWO(Int64Type)), Int64PtrType, Int64Type}), M);
+  vStore8 = DECLARE_VECTOR_FUNCTION(VoidType, "vstore8", ArrayRef<Type*>({LVTWO(LVTWO(LVTWO(Int64Type))), Int64PtrType, Int64Type}), M);
 }
 
 /*
@@ -38,7 +38,7 @@ Increment 방식일 때, 가능하다.
 1. Increment Unit을 찾는 방법
 1) Increment 변수를 찾는다.
 2) Increment part를 찾는다.
-3) Increment에 더해지는 값을 찾는다.
+3) Increment에 더해지는 값을 찾는다. 여기까지 됐다.
 
 2. Reference Unit을 찾는 방법
 1) Body를 찾는다.
@@ -68,91 +68,109 @@ store가 있어도 vectorize 한다.
 */
 
 
-SmallVector<Instruction*, 16> LoopVectorizePass::getInductionPtrs(BasicBlock *BB, Value *ind) {
-  SmallVector<Instruction*, 16> indPtrs;
-  for (Instruction &inst : *BB) {
-    Value *ptr, *v, *mayInd, *c;
-    GetElementPtrInst *GED;
-    LoadInst *lInst = dyn_cast<LoadInst>(&inst);
-    Instruction *lInst2;
-    if (lInst && (GED = dyn_cast<GetElementPtrInst>(lInst->getPointerOperand()))) {
-      if ((ptr = dyn_cast<LoadInst>(GED->getPointerOperand())) && 
-          match(GED->getOperand(1), m_SExt(m_Add(m_Instruction(lInst2), m_Value(c))))) {
-        indPtrs.push_back(lInst);
-      }
-    }
-  }
-  return indPtrs;
-}
-
-
-int LoopVectorizePass::numInduction(Value *v) {
-  for (User *u : v->users()) {
-    LoadInst *lInst = dyn_cast<LoadInst>(u);
-    if (lInst) {
-      for (User *ul : lInst->users()) {
-        Value *x, *y;
-        if (match(ul, m_Add(m_Value(x), m_Value(y)))) {
-          if (ConstantInt *c = dyn_cast<ConstantInt>(x)) return c->getSExtValue();
-          if (ConstantInt *c = dyn_cast<ConstantInt>(y)) return c->getSExtValue();
-        }
-      }
-    }
-  }
-  return 0;
-}
-
-
-LoopVectorizePass::Induction LoopVectorizePass::getInduction(Loop *L, LoopInfo &LI) {
-  SmallVector<BasicBlock*, 16> BBs;
-  L->getExitingBlocks(BBs);
-  Induction induction = Induction(nullptr, 0);
-  for (BasicBlock *BB : BBs){
-    Instruction *inst = BB->getTerminator();
-    Value *x, *y;
-    ICmpInst::Predicate pred;
-    BasicBlock *bb_true, *bb_false;
-    if (match(inst, m_Br(m_ICmp(pred, m_Value(x), m_Value(y)), bb_true, bb_false))) {
-      LoadInst *lInst = dyn_cast<LoadInst>(x);
-      int num;
-      if (lInst && (num = this->numInduction(lInst->getPointerOperand()))) induction = Induction(lInst->getPointerOperand(), num);
-      lInst = dyn_cast<LoadInst>(y);
-      if (lInst && (num = this->numInduction(lInst->getPointerOperand()))) {
-        if (induction.v == nullptr) induction = Induction(lInst->getPointerOperand(), num);
-        else induction = Induction(nullptr, 0);
-      }
-    }
-  }
-  return induction;
-}
-
 
 PreservedAnalyses LoopVectorizePass::vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE) {
-  Induction induction = this->getInduction(L, LI);
-  if (induction.v == nullptr) return PreservedAnalyses::all();
+  PreservedAnalyses PA = PreservedAnalyses::all();
+  outs() << *L << "\n";
 
+  // check induction argument
+  auto opLB = L->getBounds(SE);
+  if (!opLB.hasValue()) return PA;
+
+  Loop::LoopBounds LB = opLB.getValue();
+  ConstantInt *step = dyn_cast<ConstantInt>(LB.getStepValue());
+  if (!step) return PA;
+
+  int64_t stepSize = step->getSExtValue();
+  if (stepSize != 4) return PA;
+
+  // check data
   
-  for (BasicBlock *BB : L->getBlocksVector()) {
-    SmallVector<Instruction*, 16> ptrs = this->getInductionPtrs(BB, induction.v);
-    if (!ptrs.empty()) {
 
-    }
-  }
-
-      
+  outs() << *LB.getStepValue() << "\n";
+  outs() << LB.getInitialIVValue() << "\n";
+  outs() << LB.getFinalIVValue() << "\n";
 
   return PreservedAnalyses::all();
 }
 
-PreservedAnalyses LoopVectorizePass::run(Function &F, FunctionAnalysisManager &FAM) {
+void LoopVectorizePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM) {
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
+
+  SmallVector<AllocaInst*, 8> allocaInstVector;
+  bool isChanged = false;
+
+  while (true) {
+    allocaInstVector.clear();
+    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
+      if (AllocaInst *allocaInst = dyn_cast<AllocaInst>(&*I))
+        if (isAllocaPromotable(allocaInst)) allocaInstVector.push_back(allocaInst);
+    
+    if (allocaInstVector.empty()) break;
+
+    PromoteMemToReg(allocaInstVector, DT, &AC);
+    isChanged = true;
+  }
+
+  if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
+}
+
+void LoopVectorizePass::rotateLoop(Function &F, FunctionAnalysisManager &FAM) {
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+  if (LI.empty()) return;
+
+  LoopAnalysisManager &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
+  MemorySSA &MSSA = FAM.getResult<MemorySSAAnalysis>(F).getMSSA();
+  MemorySSAUpdater MSSAU = MemorySSAUpdater(&MSSA);
+  ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
+  TargetTransformInfo &TTI = FAM.getResult<TargetIRAnalysis>(F);
+  SimplifyQuery SQ = getBestSimplifyQuery(FAM, F);
+
+  bool isChanged = false;
+  for (Loop *L : LI.getLoopsInPreorder())
+    if ((isChanged = LoopRotation(L, &LI, &TTI, &AC, &DT, &SE, &MSSAU, SQ, true, -1, true)))
+      LAM.invalidate(*L, getLoopPassPreservedAnalyses());
+
+  if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
+}
+
+void LoopVectorizePass::makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM) {
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+  if (LI.empty()) return;
+
+  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
+  MemorySSA &MSSA = FAM.getResult<MemorySSAAnalysis>(F).getMSSA();
+  MemorySSAUpdater MSSAU = MemorySSAUpdater(&MSSA);
+  ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
+  LoopAnalysisManager &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+  
+  bool isGlobalChanged = false;
+  for (Loop *L : LI.getLoopsInPreorder()) {
+    bool isChanged = false;
+    isChanged |= simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
+    isChanged |= formLCSSARecursively(*L, DT, &LI, nullptr);
+    isGlobalChanged |= isChanged;
+    if (isChanged) LAM.invalidate(*L, getLoopPassPreservedAnalyses());
+  }
+
+  if (isGlobalChanged) FAM.invalidate(F, PreservedAnalyses::none());
+}
+
+PreservedAnalyses LoopVectorizePass::run(Function &F, FunctionAnalysisManager &FAM) {
+  this->makeAllocaAsPHI(F, FAM);
+  this->makeSimplifyLCSSA(F, FAM);
+  this->rotateLoop(F, FAM);
+
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
 
-  for (Loop *L : LI.getLoopsInPreorder()) {
+  for (Loop *L : LI.getLoopsInPreorder())
     if (L->isInnermost())
       this->vectorize(L, LI, SE);
-  }
-  
+
   return PreservedAnalyses::none();
 }

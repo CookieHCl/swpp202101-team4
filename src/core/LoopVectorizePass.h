@@ -13,10 +13,15 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/MemorySSAUpdater.h"
+#include "llvm/Analysis/InstructionSimplify.h"
+#include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Type.h"
+#include "llvm/Transforms/Utils/LoopUtils.h"
+#include "llvm/Transforms/Utils/PromoteMemToReg.h"
+#include "llvm/Transforms/Utils/LoopRotationUtils.h"
 
 using namespace llvm;
 using namespace std;
@@ -25,9 +30,9 @@ using namespace llvm::PatternMatch;
 #include <vector>
 
 #define LVTWO(x) x, x
-#define DECLARE_VECTOR_FUNCTION(retType, name, argTypeArray, M) { \
-  Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M); \
-}
+#define DECLARE_VECTOR_FUNCTION(retType, name, argTypeArray, M) \
+  Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M);\
+
 
 class LoopVectorizePass : public llvm::PassInfoMixin<LoopVectorizePass> {
 private:
@@ -40,15 +45,19 @@ private:
   Type *Vec2Int64Type;
   Type *Vec4Int64Type;
   Type *Vec8Int64Type;
-  class Induction {
-    public:
-    Induction(Value *v, int unit) : v(v), unit(unit) {}
-    Value *v;
-    int unit;
-  };
-  int numInduction(Value *v);
-  Induction getInduction(Loop *L, LoopInfo &LI);
-  SmallVector<Instruction*, 16> getInductionPtrs(BasicBlock *BB, Value *ind);
+  Function *extractElement2;
+  Function *extractElement4;
+  Function *extractElement8;
+  Function *vStore2;
+  Function *vStore4;
+  Function *vStore8;
+  Function *vLoad2;
+  Function *vLoad4;
+  Function *vLoad8;
+
+  void rotateLoop(Function &F, FunctionAnalysisManager &FAM);
+  void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
+  void makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM);
 public:
   LoopVectorizePass(Module &M);
   PreservedAnalyses vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE);
