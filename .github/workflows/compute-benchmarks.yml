@@ -22,6 +22,11 @@ jobs:
         run: ./configure.sh $LLVM_DIR
       - name: make
         run: make
+      - name: wait for previous runs
+        uses: ahmadnassri/action-workflow-queue@v1
+        with:
+          timeout: 3600000
+          delay: 60000
       - name: initialize
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
