@@ -54,10 +54,10 @@ static cl::bits<Opts, unsigned> optOptimizations(
     cl::location(optOptimizationBits), cl::CommaSeparated, cl::cat(optCategory),
     cl::values(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
+      clEnumVal(Gvn, "Constant folding & eliminate fully redundant instructions and dead load"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
-      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG"),
-      clEnumVal(Gvn, "Constant folding & eliminate fully redundant instructions and dead load")));
+      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
 
 #define IFSET(enum, X) if (optOptimizations.isSet(enum)) { X; }
 
