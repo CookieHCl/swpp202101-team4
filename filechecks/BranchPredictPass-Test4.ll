@@ -6,8 +6,8 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: nounwind uwtable
 define dso_local i32 @main() #0 {
 ; CHECK: start main
-; CHECK: xor
-; CHECK: br {{.*}} .while.end .while.body
+; CHECK: [[NOT:r.*]] = select {{.*}} 0 1
+; CHECK: br [[NOT]] .while.end .while.body
 ; CHECK: end main
 entry:
   br label %while.cond

@@ -79,9 +79,10 @@ PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &F
       }
       else {
         logs() << "Condition is not icmp or fcmp\n";
-        // implement "not" with xor
-        auto MaxConst = Constant::getAllOnesValue(Cond->getType());
-        Cond = BinaryOperator::Create(Instruction::Xor, Cond, MaxConst, Twine(),
+        // implement "not" with select
+        auto TrueConst = ConstantInt::getTrue(F.getContext());
+        auto FalseConst = ConstantInt::getFalse(F.getContext());
+        Cond = SelectInst::Create(Cond, FalseConst, TrueConst, Twine(),
           /* insert before */ Terminator);
         logs() << "Adding not operation " << *Cond << '\n';
       }
