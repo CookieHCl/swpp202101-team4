@@ -14,10 +14,10 @@ using namespace llvm::PatternMatch;
 
 class BranchPredictPass : public PassInfoMixin<BranchPredictPass> {
 private:
-  bool isVerbose;
+  const bool isVerbose;
 
   // stream for logging; only prints if verbose
-  raw_ostream& logs() {
+  raw_ostream& logs() const {
     return isVerbose ? outs() : nulls();
   }
 
