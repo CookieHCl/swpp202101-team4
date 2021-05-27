@@ -14,27 +14,15 @@ using namespace llvm::PatternMatch;
 
 class BranchPredictPass : public PassInfoMixin<BranchPredictPass> {
 private:
-  //if true, prints the intermediate steps.
-  bool printProcess;
+  bool isVerbose;
 
-  // print messages in line if verbose
-  // https://stackoverflow.com/a/9040913
-  // usage: printDebug("a", "b", "c"); -> outs() << "a" << "b" << "c" << '\n';
-  void printDebug() {
-    if (printProcess) {
-      outs() << '\n';
-    }
-  }
-  template<typename First, typename ... Strings>
-  void printDebug(First& arg, const Strings&... rest) {
-    if (printProcess) {
-      outs() << arg;
-      printDebug(rest...);
-    }
+  // stream for logging; only prints if verbose
+  raw_ostream& logs() {
+    return isVerbose ? outs() : nulls();
   }
 
 public:
-  BranchPredictPass(bool printProcess = false) : printProcess(printProcess) {}
+  BranchPredictPass(bool isVerbose = false) : isVerbose(isVerbose) {}
 
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };

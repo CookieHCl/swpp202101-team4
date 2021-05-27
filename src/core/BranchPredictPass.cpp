@@ -1,7 +1,7 @@
 #include "BranchPredictPass.h"
 
 PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &FAM) {
-  printDebug("---------- Start BranchPredictPass ----------");
+  logs() << "---------- Start BranchPredictPass ----------\n";
 
   // set of BB that has recursive call
   SmallPtrSet<BasicBlock*, 4> RecursiveBlocks;
@@ -41,13 +41,13 @@ PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &F
     bool isTrueBBRecursive = RecursiveBlocks.contains(TrueBB);
     bool isFalseBBRecursive = RecursiveBlocks.contains(FalseBB);
 
-    printDebug("Found br: ", *Terminator);
-    printDebug("True br ",
-      isTrueBBRecursive ? " is recursive, " : "is not recursive, ",
-      "probability: ", TrueBBProb);
-    printDebug("False br ",
-      isFalseBBRecursive ? " is recursive, " : "is not recursive, ",
-      "probability: ", FalseBBProb);
+    logs() << "Found br: " << *Terminator << '\n';
+    logs() << "True br "
+        << (isTrueBBRecursive ? " is recursive, " : "is not recursive, ")
+        << "probability: " << TrueBBProb << '\n';
+    logs() << "False br "
+        << (isFalseBBRecursive ? " is recursive, " : "is not recursive, ")
+        << "probability: " << FalseBBProb << '\n';
 
     // if true branch is more likely than false branch, swap
     bool shouldSwap = TrueBBProb > FalseBBProb;
@@ -62,35 +62,36 @@ PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &F
       bool isProbUnreliable = std::max(TrueBBProb, FalseBBProb).getNumerator()
         < 0.9 * BranchProbability::getDenominator();
 
-      printDebug("Contradiction; Use ", isProbUnreliable ? "recursive" : "prob");
+      logs() << "Contradiction; "
+          << (isProbUnreliable ? "Using recursive\n" : "Using probability\n");
       if (isProbUnreliable) {
         shouldSwap = !shouldSwap;
       }
     }
 
     if (shouldSwap) {
-      printDebug("Swapping branch..");
+      logs() << "Swapping branch..\n";
 
       if (auto *CmpCond = dyn_cast<CmpInst>(Cond)) {
-        printDebug(*Cond, " is icmp or fcmp");
+        logs() << *Cond << " is icmp or fcmp\n";
         CmpCond->setPredicate(CmpCond->getInversePredicate());
-        printDebug("Swapped condition to ", *Cond);
+        logs() << "Swapped condition to " << *Cond << '\n';
       }
       else {
-        printDebug("Condition is not icmp or fcmp;");
+        logs() << "Condition is not icmp or fcmp\n";
         // implement "not" with xor
         auto MaxConst = Constant::getAllOnesValue(Cond->getType());
         Cond = BinaryOperator::Create(Instruction::Xor, Cond, MaxConst, Twine(),
           /* insert before */ Terminator);
-        printDebug("Adding not operation ", *Cond);
+        logs() << "Adding not operation " << *Cond << '\n';
       }
 
       auto NewInst = BranchInst::Create(FalseBB, TrueBB, Cond);
-      printDebug("Replace br with ", *NewInst);
+      logs() << "Replace br with " << *NewInst << '\n';
       ReplaceInstWithInst(Terminator, NewInst);
     }
   }
 
-  printDebug("---------- End BranchPredictPass ----------");
+  logs() << "---------- End BranchPredictPass ----------\n";
   return PreservedAnalyses::none();
 }
