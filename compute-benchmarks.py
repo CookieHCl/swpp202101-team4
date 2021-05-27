@@ -61,7 +61,7 @@ if already_logged():
         for line in content:
             if line.partition(",")[0] != REPO_COMMIT:
                 file.write(line)
-    for benchmark, test_num in benchmarks:
+    for benchmark in benchmarks:
         with open(f'results/{benchmark}.csv', 'r+') as file:
             content = file.readlines()
             file.seek(0)
