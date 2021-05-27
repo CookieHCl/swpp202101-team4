@@ -160,11 +160,12 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
   int lenChain = instChain.size();
 
   // This is very strong condition. Should be weaken later.
+  // This hard condition covers marginal condition. e.g. range(0, 30, 4) is not vectorized.
+  // SCEV manages margin condition, so non-consecutive case are failed.
   for (int i = 1; i < lenChain; ++i) {
     const SCEV *PtrSCEVA = SE.getSCEV(getLoadStorePointerOperand(instChain[i]));
     const SCEV *ConstDelta = SE.getConstant(Size * i);
     const SCEV *delta = SE.getMinusSCEV(PtrSCEVA, PtrSCEV);
-    const SCEV *AddSCEV = SE.getAddExpr(ConstDelta, PtrSCEV);
     if (delta != ConstDelta) return isChanged;
   }
 

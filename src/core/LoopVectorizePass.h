@@ -4,37 +4,24 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/ilist_iterator.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
-#include "llvm/IR/PatternMatch.h"
-
-#include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
-#include "llvm/Analysis/MemorySSA.h"
-#include "llvm/Analysis/MemorySSAUpdater.h"
-#include "llvm/Analysis/InstructionSimplify.h"
-#include "llvm/Analysis/LoopAnalysisManager.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/GlobalValue.h"
-#include "llvm/IR/Type.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
-#include "llvm/Transforms/Utils/LoopRotationUtils.h"
-#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/IR/Value.h"
-
-using namespace llvm;
-using namespace std;
-using namespace llvm::PatternMatch;
 
 #include <vector>
 
 #define LVTWO(x) x, x
 #define DECLARE_VECTOR_FUNCTION(retType, name, argTypeArray, M) \
   Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M)\
+
+using namespace llvm;
+using namespace std;
 
 
 class LoopVectorizePass : public llvm::PassInfoMixin<LoopVectorizePass> {
