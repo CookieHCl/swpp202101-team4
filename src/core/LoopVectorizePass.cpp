@@ -31,67 +31,258 @@ LoopVectorizePass::LoopVectorizePass(Module &M) : PassInfoMixin() {
   vStore8 = DECLARE_VECTOR_FUNCTION(VoidType, "vstore8", ArrayRef<Type*>({LVTWO(LVTWO(LVTWO(Int64Type))), Int64PtrType, Int64Type}), M);
 }
 
-/*
-Loop Carry Dependencec가 없어야 한다.
-Increment Unit과 refernece Unit이 같아야 한다.
-Increment 방식일 때, 가능하다.
-1. Increment Unit을 찾는 방법
-1) Increment 변수를 찾는다.
-2) Increment part를 찾는다.
-3) Increment에 더해지는 값을 찾는다. 여기까지 됐다.
+LoopVectorizePass::ChainID LoopVectorizePass::getChainID(const Value *Ptr) {
+  const Value *objectPtr = getUnderlyingObject(Ptr);
+  if (const auto *selectInst = dyn_cast<SelectInst>(objectPtr)) return selectInst->getCondition();
+  return objectPtr;
+}
 
-2. Reference Unit을 찾는 방법
-1) Body를 찾는다.
-2) 한 데이터가 Body 안에서 Increment Unit 만큼의 
+std::pair<LoopVectorizePass::InstChainMap, LoopVectorizePass::InstChainMap> 
+LoopVectorizePass::collectInstructions(BasicBlock *BB, TargetTransformInfo &TTI) {
+  InstChainMap loadChainMap;
+  InstChainMap storeChainMap;
 
-일단 루프 안에서 store를 모두 찾는다. store 가 없으면 루프가 이뤄질수가 없다. (SSA)
+  for (Instruction &I : *BB) {
+    if (!I.mayReadOrWriteMemory()) continue;
+    if (LoadInst *loadInst = dyn_cast<LoadInst>(&I)) {
+      if (!loadInst->isSimple()) continue;
+      if (!TTI.isLegalToVectorizeLoad(loadInst)) continue;
+      IntegerType *Ty = dyn_cast<IntegerType>(loadInst->getType());
+      if (!Ty || Ty->getBitWidth() != 64u) continue;
+
+      ChainID cid = getChainID(loadInst->getPointerOperand());
+      loadChainMap[cid].push_back(&I);
+    }
+    else if (StoreInst *storeInst = dyn_cast<StoreInst>(&I)) {
+      if (!storeInst->isSimple()) continue;
+      if (!TTI.isLegalToVectorizeStore(storeInst)) continue;
+      IntegerType *Ty = dyn_cast<IntegerType>(storeInst->getValueOperand()->getType());
+      if (!Ty || Ty->getBitWidth() != 64u) continue;
+
+      ChainID cid = getChainID(storeInst->getPointerOperand());
+      storeChainMap[cid].push_back(&I);
+    }
+  }
+
+  return {loadChainMap, storeChainMap};
+}
+
+Function* LoopVectorizePass::getVectorCallee(int dimension, LoopVectorizePass::CalleeType calleeType) {
+  Function *callee;
+  switch (dimension) {
+    case 2: callee = (calleeType == CalleeType::LOAD) ? vLoad2 : (calleeType == CalleeType::STORE ? vStore2 : extractElement2) ; break;
+    case 4: callee = (calleeType == CalleeType::LOAD) ? vLoad4 : (calleeType == CalleeType::STORE ? vStore4 : extractElement4) ; break;
+    case 8: callee = (calleeType == CalleeType::LOAD) ? vLoad8 : (calleeType == CalleeType::STORE ? vStore8 : extractElement8) ; break;
+    default: assert(true && "Wrong dimension");
+  }
+  return callee;
+}
+
+void LoopVectorizePass::fillVectorArgument(Value *address, int64_t mask, SmallVector<Value*, 8> &Args) {
+  Value *Ptr = address;
+  Value *Mask = ConstantInt::getSigned(Int64Type, mask);
+  Args.push_back(Ptr);
+  Args.push_back(Mask);
+
+}
+
+void LoopVectorizePass::vectorizeLoadInsts(InstChain &instChain, int dimension, int64_t mask, Instruction *first) {
+  int num = instChain.size();
+
+  for (int i = 1; i < num; ++i)
+    instChain[i]->moveAfter(instChain[i - 1]);
+
+  Function *load = getVectorCallee(dimension, CalleeType::LOAD);
+  Function *extract = getVectorCallee(dimension, CalleeType::EXTRACT);
+  Value *Address = getLoadStorePointerOperand(first);
+  SmallVector<Value*, 8> Args;
+  fillVectorArgument(Address, mask, Args);
+
+  CallInst *vLoad = CallInst::Create(load->getFunctionType(), load, ArrayRef<Value*>(Args), "", instChain.front());
 
 
-바꾸는 방법
-1. Reorder 한다
-2. 묶는다.
-3. 바꾼다.
 
+  int chainIndex = 0;  
+  for (int i = 0; i < dimension; ++i) {
+    if (int64_t(1 << i) & mask) {
+      Instruction *inst = instChain[chainIndex++];
+      Value *Index = ConstantInt::getSigned(Int64Type, int64_t(i));
+      CallInst *vExtract = CallInst::Create(extract->getFunctionType(), extract, ArrayRef<Value*>({vLoad, Index}), "");
+      ReplaceInstWithInst(inst, vExtract);
+    }
+  }
 
-vector instructino이 있다고 더 못바꾸는건... 맞네.
-그래 vector instruction이 있으면 못바꾼다.
-대신 loop unrolling 에서 더 refine 하면 좋겠다. constant size loop를 펴줬으면 좋겠다.
+}
 
-Loop unrolling 에서 할 것.
-1) Constant size loop를 없앤다
-2) 8개 안 찬 단위는 더 편다.
+void LoopVectorizePass::vectorizeStoreInsts(InstChain &instChain, int dimension, int64_t mask, Instruction *first) {
+  int num = instChain.size();
 
-
-body에 load가 있으면 vectorize 한다.
-store가 있어도 vectorize 한다.
-
-*/
-
-
-
-PreservedAnalyses LoopVectorizePass::vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE) {
-  PreservedAnalyses PA = PreservedAnalyses::all();
-  outs() << *L << "\n";
-
-  // check induction argument
-  auto opLB = L->getBounds(SE);
-  if (!opLB.hasValue()) return PA;
-
-  Loop::LoopBounds LB = opLB.getValue();
-  ConstantInt *step = dyn_cast<ConstantInt>(LB.getStepValue());
-  if (!step) return PA;
-
-  int64_t stepSize = step->getSExtValue();
-  if (stepSize != 4) return PA;
-
-  // check data
+  for (int i = num - 2 ; i >= 0; --i) 
+    instChain[i]->moveBefore(instChain[i + 1]);
   
+  Function *store = getVectorCallee(dimension, CalleeType::STORE);
+  SmallVector<Value*, 8> Args;
+  Value *Address = getLoadStorePointerOperand(first);
 
-  outs() << *LB.getStepValue() << "\n";
-  outs() << LB.getInitialIVValue() << "\n";
-  outs() << LB.getFinalIVValue() << "\n";
+  int index = 0;
+  for (int i = 0; i < dimension; ++i) {
+    Value *arg;
+    if ((1 << i) & mask) arg = dyn_cast<StoreInst>(instChain[index++])->getValueOperand();
+    else arg = ConstantInt::getSigned(dyn_cast<IntegerType>(Int64Type), 0u);
+    Args.push_back(arg);
+  }
 
-  return PreservedAnalyses::all();
+  fillVectorArgument(Address, mask, Args);
+
+  CallInst::Create(store->getFunctionType(), store, ArrayRef<Value*>(Args), "", instChain.front());
+
+  for (Instruction *inst : instChain)
+    inst->eraseFromParent();
+
+}
+
+// Vectorize Instructions composed with three step
+// 1) Check whether the memory access are consecutive.
+// 2) Check whether loop carried dependence exists.
+// 3) Vectorize
+// 3-1) Reorder instruction. For load, up-reorder and store, down-reorder
+// 3-2) Add function call (vload/vstore) and replace instruction.
+bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &instChain, ScalarEvolution &SE, 
+                                              const DataLayout &DL, DominatorTree &DT) {
+  if (instChain.size() < 2) return false;
+
+  bool isChanged = false;
+  Value *Ptr = getLoadStorePointerOperand(instChain.front());
+  bool isLoad = isa<LoadInst>(instChain.front());
+  const SCEV *PtrSCEV = SE.getSCEV(Ptr);
+  unsigned PtrBitWidth = DL.getPointerSizeInBits(0);
+  APInt Size(PtrBitWidth, DL.getTypeStoreSize(Ptr->getType()->getPointerElementType()));
+  int lenChain = instChain.size();
+
+  // This is very strong condition. Should be weaken later.
+  for (int i = 1; i < lenChain; ++i) {
+    const SCEV *PtrSCEVA = SE.getSCEV(getLoadStorePointerOperand(instChain[i]));
+    const SCEV *ConstDelta = SE.getConstant(Size * i);
+    const SCEV *delta = SE.getMinusSCEV(PtrSCEVA, PtrSCEV);
+    const SCEV *AddSCEV = SE.getAddExpr(ConstDelta, PtrSCEV);
+    if (delta != ConstDelta) return isChanged;
+  }
+
+  // Max Vectorize unit is 8. Therefore, split in 8.
+  // This is not the best case: 0-6 impossible and 7 possible + 8 possible and 9-15 impossible
+  // Require more elaborate scheduling.
+  for (int i = 0; i < lenChain; i += 8) {\
+    int num = ((i + 8) < lenChain ? (i + 8) : lenChain) - i;
+
+    if (num < 2) continue;
+
+    Instruction *first = instChain[i];
+    Instruction *last = instChain[i + num - 1];
+    InstChain toVectorize;
+    int64_t mask = 0;  // Load mask, but also can be used for store. (e.g. 1010 means vectorize 0th and 2th element)
+
+    // Detecting loop carried dependence. Note that this is also strong condition, wil be weaken.
+    // Example of Loop Carried Dependence:
+    //   A[i + 1] = A[i];
+    //   A[i + 2] = A[i + 1];  in this case, we cannot vectorize because of sequential memory access pattern. 
+    std::vector<std::pair<Instruction*, const SCEV*>> SCEVItems;
+    if (isLoad) {
+      // For load chain, we should avoid "Load after Store".
+      // Hence load are up-reordered, first chain element always can be vectorized.
+      // And last chain element is difficult to vectorize 
+      // because there is the highest probability that at least one store exists.
+      //   ADD                                                                LOAD
+      //   LOAD    -> This can be vectorized. Just think LOAD goes up. ->     ADD
+      //    ...                                                               ...
+      //   STORE                                                              STORE
+      //
+      //  STORE
+      //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load, 
+      //   LOAD      the result will change.
+      mask |= 1;
+      toVectorize.push_back(instChain[i]);
+    
+      for (auto P = first->getIterator(), E = last->getIterator(); P != E; ++P)
+        if (StoreInst *storeInst = dyn_cast<StoreInst>(&*P)) 
+          SCEVItems.push_back(make_pair(&*P, SE.getSCEV(storeInst->getPointerOperand())));
+          
+      // Note that the condition. DT.dominates means pair.first(StoreInst) is preceeding  current load Inst 
+      // and the memory access location is same (Scalar Evolution term)
+      for (int j = 1; j < num; ++j) {
+        Instruction *current = instChain[i + j];
+        const SCEV *loadLocation = SE.getSCEV(getLoadStorePointerOperand(current));
+        if (any_of(SCEVItems, 
+            [current, loadLocation, &DT, &SE](std::pair<Instruction*, const SCEV*> pair) { 
+              return DT.dominates(pair.first, current) && (SE.getMinusSCEV(pair.second, loadLocation)->isZero());
+            })) continue;
+        mask |= (1 << j);
+        toVectorize.push_back(current);
+      }
+    } else {
+      // For Store chain, we should avoid "Load after Store".
+      // Hence store are down-reordered, last chain element always can be vectorized.
+      // First chain element is difficult to vectorize 
+      // because there is the highest probability that at least one load exists.
+      //  LOAD                                                               LOAD
+      //   ...    -> This can be vectorized. Just think STORE goes down. ->  ...
+      //  STORE                                                              ADD
+      //   ADD                                                              STORE
+      //
+      //  STORE
+      //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load, 
+      //   LOAD      the result will change.
+      for (auto P = first->getIterator(), E = last->getIterator(); P != E; ++P)
+        if (LoadInst *loadInst = dyn_cast<LoadInst>(&*P))
+          SCEVItems.push_back(make_pair(&*P, SE.getSCEV(loadInst->getPointerOperand())));
+
+      // Note that the condition. DT.dominates means current store is preceeding pair.first(LoadInst) 
+      // and the memory access location is same (Scalar Evolution term)
+      for (int j = 0; j < num - 1; ++j) {
+        Instruction *current = instChain[i + j];
+        const SCEV *storeLocation = SE.getSCEV(getLoadStorePointerOperand(current));
+        if (any_of(SCEVItems, 
+            [current, storeLocation, &DT, &SE](std::pair<Instruction*, const SCEV*> pair) { 
+              return DT.dominates(current, pair.first) && (SE.getMinusSCEV(pair.second, storeLocation)->isZero());
+            })) continue;
+        mask |= (1 << j);
+        toVectorize.push_back(current);
+      }
+      toVectorize.push_back(instChain[i + num - 1]);
+      mask |= (1 << (num - 1));
+    }
+   
+    int newNum = toVectorize.size();
+    if (newNum < 2) continue;
+
+    isChanged = true;
+
+    int dimension = 4 * int(newNum > 4) + 2 * int(newNum > 2) + int(newNum > 1) + 1;
+
+    if (isLoad) vectorizeLoadInsts(toVectorize, dimension, mask, first);
+    else vectorizeStoreInsts(toVectorize, dimension, mask, first);
+  }    
+  return isChanged;
+}
+
+bool LoopVectorizePass::vectorizeMap(LoopVectorizePass::InstChainMap &instChainMap, ScalarEvolution &SE, const DataLayout &DL,  DominatorTree &DT) {
+  bool isChanged = false;
+  for (std::pair<ChainID, InstChain> &chainItem : instChainMap) 
+    isChanged |= vectorizeInstructions(chainItem.second, SE, DL, DT);
+  return isChanged;
+}
+
+bool LoopVectorizePass::vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE, TargetTransformInfo &TTI, const DataLayout &DL,  DominatorTree &DT) {
+  bool isChanged = false;
+
+  // About BasicBlocks in one Loop, collect vectorizable instructions and vectorize.
+  for (BasicBlock *BB : L->getBlocks()) {
+    InstChainMap loadChainMap, storeChainMap;
+    std::tie(loadChainMap, storeChainMap) = collectInstructions(BB, TTI);
+    isChanged |= vectorizeMap(loadChainMap, SE, DL, DT);
+    isChanged |= vectorizeMap(storeChainMap, SE, DL, DT);
+  }
+
+  return isChanged;
 }
 
 void LoopVectorizePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM) {
@@ -116,61 +307,20 @@ void LoopVectorizePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FA
   if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
 }
 
-void LoopVectorizePass::rotateLoop(Function &F, FunctionAnalysisManager &FAM) {
-  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-  if (LI.empty()) return;
+PreservedAnalyses LoopVectorizePass::run(Function &F, FunctionAnalysisManager &FAM) {
+  // In order to optimize the loop, its induction need to be a PHInode. (Scalar Evolution)
+  this->makeAllocaAsPHI(F, FAM);
 
-  LoopAnalysisManager &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
-  MemorySSA &MSSA = FAM.getResult<MemorySSAAnalysis>(F).getMSSA();
-  MemorySSAUpdater MSSAU = MemorySSAUpdater(&MSSA);
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
   TargetTransformInfo &TTI = FAM.getResult<TargetIRAnalysis>(F);
-  SimplifyQuery SQ = getBestSimplifyQuery(FAM, F);
+  const DataLayout &DL = F.getParent()->getDataLayout();
 
   bool isChanged = false;
   for (Loop *L : LI.getLoopsInPreorder())
-    if ((isChanged = LoopRotation(L, &LI, &TTI, &AC, &DT, &SE, &MSSAU, SQ, true, -1, true)))
-      LAM.invalidate(*L, getLoopPassPreservedAnalyses());
-
-  if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
-}
-
-void LoopVectorizePass::makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM) {
-  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-  if (LI.empty()) return;
-
-  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
-  MemorySSA &MSSA = FAM.getResult<MemorySSAAnalysis>(F).getMSSA();
-  MemorySSAUpdater MSSAU = MemorySSAUpdater(&MSSA);
-  ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
-  LoopAnalysisManager &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
-  
-  bool isGlobalChanged = false;
-  for (Loop *L : LI.getLoopsInPreorder()) {
-    bool isChanged = false;
-    isChanged |= simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
-    isChanged |= formLCSSARecursively(*L, DT, &LI, nullptr);
-    isGlobalChanged |= isChanged;
-    if (isChanged) LAM.invalidate(*L, getLoopPassPreservedAnalyses());
-  }
-
-  if (isGlobalChanged) FAM.invalidate(F, PreservedAnalyses::none());
-}
-
-PreservedAnalyses LoopVectorizePass::run(Function &F, FunctionAnalysisManager &FAM) {
-  this->makeAllocaAsPHI(F, FAM);
-  this->makeSimplifyLCSSA(F, FAM);
-  this->rotateLoop(F, FAM);
-
-  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-  ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
-
-  for (Loop *L : LI.getLoopsInPreorder())
     if (L->isInnermost())
-      this->vectorize(L, LI, SE);
+      isChanged |= this->vectorize(L, LI, SE, TTI, DL, DT);
 
-  return PreservedAnalyses::none();
+  return isChanged ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

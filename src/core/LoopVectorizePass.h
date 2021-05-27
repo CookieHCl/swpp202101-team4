@@ -22,6 +22,9 @@
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include "llvm/Transforms/Utils/LoopRotationUtils.h"
+#include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/IR/Value.h"
 
 using namespace llvm;
 using namespace std;
@@ -31,36 +34,35 @@ using namespace llvm::PatternMatch;
 
 #define LVTWO(x) x, x
 #define DECLARE_VECTOR_FUNCTION(retType, name, argTypeArray, M) \
-  Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M);\
+  Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M)\
 
 
 class LoopVectorizePass : public llvm::PassInfoMixin<LoopVectorizePass> {
+  using ChainID = const Value*;
+  using InstChain = SmallVector<Instruction*, 8>;
+  using InstChainMap = MapVector<ChainID, InstChain>;
 private:
-  static const int64_t full2 = 3;  // b'11
-  static const int64_t full4 = 15;  // b'1111
-  static const int64_t full8 = 255; // b'11111111
-  Type *VoidType;
-  Type *Int64Type;
-  Type *Int64PtrType;
-  Type *Vec2Int64Type;
-  Type *Vec4Int64Type;
-  Type *Vec8Int64Type;
-  Function *extractElement2;
-  Function *extractElement4;
-  Function *extractElement8;
-  Function *vStore2;
-  Function *vStore4;
-  Function *vStore8;
-  Function *vLoad2;
-  Function *vLoad4;
-  Function *vLoad8;
+  Type *VoidType, *Int64Type, *Int64PtrType, *Vec2Int64Type, *Vec4Int64Type, *Vec8Int64Type;
+  Function *extractElement2, *extractElement4, *extractElement8, *vLoad2, *vLoad4, *vLoad8; 
+  Function *vStore2, *vStore4, *vStore8;
+  enum CalleeType : unsigned {
+    LOAD = 0,
+    EXTRACT = 1,
+    STORE = 2
+  };
 
-  void rotateLoop(Function &F, FunctionAnalysisManager &FAM);
+  ChainID getChainID(const Value *Ptr);
+  std::pair<InstChainMap, InstChainMap> collectInstructions(BasicBlock *BB, TargetTransformInfo &TTI);
+  Function* getVectorCallee(int dimension, LoopVectorizePass::CalleeType calleeType);
+  void fillVectorArgument(Value *address, int64_t mask, SmallVector<Value*, 8> &Args);
   void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
-  void makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM);
+  bool vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE, TargetTransformInfo &TTI, const DataLayout &DL, DominatorTree &DT);
+  bool vectorizeMap(InstChainMap &instChainMap, ScalarEvolution &SE, const DataLayout &DL, DominatorTree &DT);
+  bool vectorizeInstructions(InstChain &instChain, ScalarEvolution &SE, const DataLayout &DL, DominatorTree &DT);
+  void vectorizeLoadInsts(InstChain &instChain, int dimension, int64_t mask, Instruction *first);
+  void vectorizeStoreInsts(InstChain &instChain, int dimension, int64_t mask, Instruction *first);
 public:
   LoopVectorizePass(Module &M);
-  PreservedAnalyses vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE);
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
