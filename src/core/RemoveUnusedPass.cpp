@@ -38,7 +38,7 @@ bool RemoveUnusedPass::eraseUnusedInstruction(Function &F, FunctionAnalysisManag
 
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
     Instruction *inst = &*I;
-    if (!usedValues.count(inst)) unusedInsts.insert(inst);
+    if (!usedValues.contains(inst)) unusedInsts.insert(inst);
   }
   this->eraseInstructions(unusedInsts);
 
@@ -50,7 +50,7 @@ void RemoveUnusedPass::eraseInstructions(SmallPtrSet<Instruction*, 16> insts) {
   while (true) {
     for (Instruction *inst : insts)
       if (inst->use_empty()) safeRemoveInsts.push(inst);
-    
+
     if (safeRemoveInsts.empty()) return;
 
     while (!safeRemoveInsts.empty()) {
@@ -62,8 +62,8 @@ void RemoveUnusedPass::eraseInstructions(SmallPtrSet<Instruction*, 16> insts) {
   }
 }
 
-SmallPtrSet<GlobalValue*, 16> RemoveUnusedPass::getGloalValues(Function &F) {
-  SmallPtrSet<GlobalValue*, 16> globalValues;
+SmallPtrSet<Value*, 16> RemoveUnusedPass::getGlobalValues(Function &F) {
+  SmallPtrSet<Value*, 16> globalValues;
   Module *M = F.getParent();
 
   for (auto gv_iter = M->global_begin(), gv_end = M->global_end(); gv_iter != gv_end; ++gv_iter) {
@@ -79,16 +79,14 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getRecursiveUsers(Value *v, SmallPtrSe
   SmallPtrSet<Value*, 16> nonInst;
   checked.insert(v);
   if (condition(v)) nonInst.insert(v);
-  for (User *u : v->users()) 
-    if (!checked.count(u)) set_union(nonInst, this->getRecursiveUsers(u, checked, condition));      
+  for (User *u : v->users())
+    if (!checked.contains(u)) set_union(nonInst, this->getRecursiveUsers(u, checked, condition));
   return nonInst;
 }
 
 SmallPtrSet<Value*, 16> RemoveUnusedPass::getNecessaryValues(Function &F) {
-  SmallPtrSet<Value*, 16> necessaryValues;
-
   // Contain GlobalValue and related Non-ControlFlow values
-  set_union(necessaryValues, this->getGloalValues(F));
+  SmallPtrSet<Value*, 16> necessaryValues = this->getGlobalValues(F);
 
   // Contain Arguments
   for (Argument &arg : F.args()) necessaryValues.insert(&arg);
@@ -108,8 +106,12 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getNecessaryValues(Function &F) {
 
   necessaryValues.clear();
   for (Value *v : prevNecessaryValues) {
+    // mayHaveSideEffects contains "exception" and "memoryWrite" instructions.
+    // The instructions except them are definitely unnecessary.
     Instruction *inst = dyn_cast<Instruction>(v);
     if (inst && !inst->mayHaveSideEffects()) continue;
+    // To check saving value in getUsedValue, all proceeded pointer values must be saved.
+    // This can remain unused pointer address.
     StoreInst *sInst = dyn_cast<StoreInst>(v);
     if (sInst && !sInst->getValueOperand()->getType()->isPointerTy()) continue;
     necessaryValues.insert(v);
@@ -134,7 +136,7 @@ SmallPtrSet<Instruction*, 16> RemoveUnusedPass::getSideEffectsInst(Function &F) 
   return sideSet;
 }
 
-template<typename Lambda1, typename Lambda2> 
+template<typename Lambda1, typename Lambda2>
 SmallPtrSet<Value*, 16> RemoveUnusedPass::getInstPredecessors(Instruction *inst, Lambda1 valueCondition, Lambda2 operandCondition) {
   SmallPtrSet<Value*, 16> predSet;
   queue<Value*> predQueue;
@@ -142,9 +144,9 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getInstPredecessors(Instruction *inst,
   while (!predQueue.empty()) {
     Value* v = predQueue.front();
     predQueue.pop();
-    if (!predSet.count(v)) {
+    if (!predSet.contains(v)) {
       if (valueCondition(v)) predSet.insert(v);
-    
+
       if (Instruction *I = dyn_cast<Instruction>(v))
         for (Value *op : I->operands())
           if (operandCondition(I, op))
@@ -158,8 +160,8 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getPredecessorSet(SmallPtrSet<Value*, 
   SmallPtrSet<Value*, 16> predSet;
   for (Value *v : valueSet) {
     if (Instruction *inst = dyn_cast<Instruction>(v))
-      set_union(predSet, this->getInstPredecessors(inst, 
-      [](Value *v) { return !isa<BasicBlock>(v) && !isa<ConstantData>(v) && !isa<ConstantExpr>(v); }, 
+      set_union(predSet, this->getInstPredecessors(inst,
+      [](Value *v) { return !isa<BasicBlock>(v) && !isa<ConstantData>(v) && !isa<ConstantExpr>(v); },
       [](Instruction *I, Value *v) { return true; }));
   }
   return predSet;
@@ -169,17 +171,17 @@ bool RemoveUnusedPass::isNecessaryInst(Instruction *inst, SmallPtrSet<Value*, 16
   Instruction *target = inst;
   if (StoreInst *sInst = dyn_cast<StoreInst>(inst)) {
     Value *ptr = sInst->getPointerOperand();
-    if (necessarySet.count(ptr)) return true;
+    if (necessarySet.contains(ptr)) return true;
     if (Instruction *targetInst = dyn_cast<Instruction>(ptr)) target = targetInst;
     else return false;
   }
   
   SmallPtrSet<Value*, 16> intersectSet(necessarySet);
-  set_intersect(intersectSet, this->getInstPredecessors(target, 
-      [](Value *v) { return !isa<BasicBlock>(v) && !isa<ConstantData>(v) && !isa<ConstantExpr>(v); }, 
-      [](Instruction *I, Value *v) { 
+  set_intersect(intersectSet, this->getInstPredecessors(target,
+      [](Value *v) { return !isa<BasicBlock>(v) && !isa<ConstantData>(v) && !isa<ConstantExpr>(v); },
+      [](Instruction *I, Value *v) {
         if (GetElementPtrInst *Ginst = dyn_cast<GetElementPtrInst>(I)) return v == Ginst->getPointerOperand();
-        return true; 
+        return true;
       }));
   if (!intersectSet.empty()) return true;
 
@@ -190,18 +192,18 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getUsedValues(Function &F) {
   SmallPtrSet<Value*, 16> necessaryValues = this->getNecessaryValues(F);
   SmallPtrSet<Instruction*, 16> sideInsts = this->getSideEffectsInst(F);
 
-  while (true) {
+  unsigned prevSize, currentSize;
+  do {
     for (Instruction *inst : sideInsts)
       if (isNecessaryInst(inst, necessaryValues))
         necessaryValues.insert(inst);
 
     SmallPtrSet<Value*, 16> predecessorSet = this->getPredecessorSet(necessaryValues, F);
-    SmallPtrSet<Value*, 16> diffSet(predecessorSet);
-    set_subtract(diffSet, necessaryValues);
 
-    if (diffSet.empty()) break;
-    else set_union(necessaryValues, diffSet);
-  }
+    prevSize = necessaryValues.size();
+    set_union(necessaryValues, predecessorSet);
+    currentSize = necessaryValues.size();
+  } while (prevSize != currentSize);
   
   return necessaryValues;
 }

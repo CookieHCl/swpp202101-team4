@@ -23,7 +23,7 @@ private:
 public:
   template<typename Lambda1, typename Lambda2> 
   SmallPtrSet<Value*, 16> getInstPredecessors(Instruction *inst, Lambda1 valueCondition, Lambda2 operandCondition);
-  SmallPtrSet<GlobalValue*, 16> getGloalValues(Function &F);
+  SmallPtrSet<Value*, 16> getGlobalValues(Function &F);
   SmallPtrSet<Value*, 16> getPredecessorSet(SmallPtrSet<Value*, 16> &valueSet, Function &F); 
   SmallPtrSet<Value*, 16> getUsedValues(Function &F);
   vector<BasicBlock*> getUnreachableBB(Function &F, FunctionAnalysisManager &FAM);
