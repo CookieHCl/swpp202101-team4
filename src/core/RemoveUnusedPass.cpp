@@ -98,8 +98,8 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getNecessaryValues(Function &F) {
   SmallPtrSet<Value*, 16> prevNecessaryValues;
   do {
     set_union(prevNecessaryValues, necessaryValues);
+    SmallPtrSet<Value*, 16> checked;
     for (Value *v : prevNecessaryValues) {
-      SmallPtrSet<Value*, 16> checked;
       set_union(necessaryValues, this->getRecursiveUsers(v, checked, [](Value *u) { return !isa<BasicBlock>(u); }));
       Instruction *inst = dyn_cast<Instruction>(v);
       if (inst && inst->mayHaveSideEffects())
