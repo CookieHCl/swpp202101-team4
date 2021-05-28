@@ -3,6 +3,8 @@
 PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &FAM) {
   // check if changed to return correct preserved analyses
   bool Changed = false;
+  // branch probability info to check branch probability
+  BranchProbabilityInfo &BPI = FAM.getResult<BranchProbabilityAnalysis>(F);
 
   logs() << "---------- Start BranchPredictPass ----------\n";
 
@@ -18,9 +20,6 @@ PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &F
       }
     }
   }
-
-  // branch probability info to check branch probability
-  BranchProbabilityInfo &BPI = FAM.getResult<BranchProbabilityAnalysis>(F);
 
   for (BasicBlock &BB : F) {
     // if block is not well formed, return

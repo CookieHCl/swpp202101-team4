@@ -18,7 +18,6 @@ private:
   const long double PROB_THRESHOLD = 0.9L;
 
   const bool isVerbose;
-
   // stream for logging; only prints if verbose
   raw_ostream& logs() const {
     return isVerbose ? outs() : nulls();
