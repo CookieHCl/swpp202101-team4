@@ -1,6 +1,9 @@
 #include "BranchPredictPass.h"
 
 PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &FAM) {
+  // check if changed to return correct preserved analyses
+  bool Changed = false;
+
   logs() << "---------- Start BranchPredictPass ----------\n";
 
   // set of BB that has recursive call
@@ -70,6 +73,9 @@ PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &F
     }
 
     if (shouldSwap) {
+      // mark as changed
+      Changed = true;
+
       logs() << "Swapping branch..\n";
 
       if (auto *CmpCond = dyn_cast<CmpInst>(Cond)) {
@@ -94,5 +100,5 @@ PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &F
   }
 
   logs() << "---------- End BranchPredictPass ----------\n";
-  return PreservedAnalyses::none();
+  return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
