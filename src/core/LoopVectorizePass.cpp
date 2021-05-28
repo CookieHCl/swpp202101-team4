@@ -70,24 +70,23 @@ LoopVectorizePass::collectInstructions(BasicBlock *BB, TargetTransformInfo &TTI)
 Function* LoopVectorizePass::getVectorCallee(int dimension, LoopVectorizePass::CalleeType calleeType) {
   Function *callee;
   switch (dimension) {
-    case 2: callee = (calleeType == CalleeType::LOAD) ? vLoad2 : (calleeType == CalleeType::STORE ? vStore2 : extractElement2) ; break;
-    case 4: callee = (calleeType == CalleeType::LOAD) ? vLoad4 : (calleeType == CalleeType::STORE ? vStore4 : extractElement4) ; break;
-    case 8: callee = (calleeType == CalleeType::LOAD) ? vLoad8 : (calleeType == CalleeType::STORE ? vStore8 : extractElement8) ; break;
-    default: assert(true && "Wrong dimension");
+    case 2: callee = (calleeType == CalleeType::LOAD) ? vLoad2 : (calleeType == CalleeType::STORE ? vStore2 : extractElement2); break;
+    case 4: callee = (calleeType == CalleeType::LOAD) ? vLoad4 : (calleeType == CalleeType::STORE ? vStore4 : extractElement4); break;
+    case 8: callee = (calleeType == CalleeType::LOAD) ? vLoad8 : (calleeType == CalleeType::STORE ? vStore8 : extractElement8); break;
+    default: llvm_unreachable("Wrong dimension");
   }
   return callee;
 }
 
-void LoopVectorizePass::fillVectorArgument(Value *address, int64_t mask, SmallVector<Value*, 8> &Args) {
+void LoopVectorizePass::fillVectorArgument(Value *address, const int64_t mask, SmallVector<Value*, 8> &Args) {
   Value *Ptr = address;
   Value *Mask = ConstantInt::getSigned(Int64Type, mask);
   Args.push_back(Ptr);
   Args.push_back(Mask);
-
 }
 
-void LoopVectorizePass::vectorizeLoadInsts(InstChain &instChain, int dimension, int64_t mask, Instruction *first) {
-  int num = instChain.size();
+void LoopVectorizePass::vectorizeLoadInsts(InstChain &instChain, const int dimension, const int64_t mask, Instruction *first) {
+  const int num = instChain.size();
 
   for (int i = 1; i < num; ++i)
     instChain[i]->moveAfter(instChain[i - 1]);
@@ -100,9 +99,7 @@ void LoopVectorizePass::vectorizeLoadInsts(InstChain &instChain, int dimension, 
 
   CallInst *vLoad = CallInst::Create(load->getFunctionType(), load, ArrayRef<Value*>(Args), "", instChain.front());
 
-
-
-  int chainIndex = 0;  
+  int chainIndex = 0;
   for (int i = 0; i < dimension; ++i) {
     if (int64_t(1 << i) & mask) {
       Instruction *inst = instChain[chainIndex++];
@@ -111,15 +108,14 @@ void LoopVectorizePass::vectorizeLoadInsts(InstChain &instChain, int dimension, 
       ReplaceInstWithInst(inst, vExtract);
     }
   }
-
 }
 
-void LoopVectorizePass::vectorizeStoreInsts(InstChain &instChain, int dimension, int64_t mask, Instruction *first) {
-  int num = instChain.size();
+void LoopVectorizePass::vectorizeStoreInsts(InstChain &instChain, const int dimension, const int64_t mask, Instruction *first) {
+  const int num = instChain.size();
 
-  for (int i = num - 2 ; i >= 0; --i) 
+  for (int i = num - 2 ; i >= 0; --i)
     instChain[i]->moveBefore(instChain[i + 1]);
-  
+
   Function *store = getVectorCallee(dimension, CalleeType::STORE);
   SmallVector<Value*, 8> Args;
   Value *Address = getLoadStorePointerOperand(first);
@@ -138,7 +134,6 @@ void LoopVectorizePass::vectorizeStoreInsts(InstChain &instChain, int dimension,
 
   for (Instruction *inst : instChain)
     inst->eraseFromParent();
-
 }
 
 // Vectorize Instructions composed with three step
@@ -147,17 +142,17 @@ void LoopVectorizePass::vectorizeStoreInsts(InstChain &instChain, int dimension,
 // 3) Vectorize
 // 3-1) Reorder instruction. For load, up-reorder and store, down-reorder
 // 3-2) Add function call (vload/vstore) and replace instruction.
-bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &instChain, ScalarEvolution &SE, 
+bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &instChain, ScalarEvolution &SE,
                                               const DataLayout &DL, DominatorTree &DT) {
   if (instChain.size() < 2) return false;
 
   bool isChanged = false;
   Value *Ptr = getLoadStorePointerOperand(instChain.front());
-  bool isLoad = isa<LoadInst>(instChain.front());
+  const bool isLoad = isa<LoadInst>(instChain.front());
   const SCEV *PtrSCEV = SE.getSCEV(Ptr);
   unsigned PtrBitWidth = DL.getPointerSizeInBits(0);
   APInt Size(PtrBitWidth, DL.getTypeStoreSize(Ptr->getType()->getPointerElementType()));
-  int lenChain = instChain.size();
+  const int lenChain = instChain.size();
 
   // This is very strong condition. Should be weaken later.
   // This hard condition covers marginal condition. e.g. range(0, 30, 4) is not vectorized.
@@ -172,25 +167,26 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
   // Max Vectorize unit is 8. Therefore, split in 8.
   // This is not the best case: 0-6 impossible and 7 possible + 8 possible and 9-15 impossible
   // Require more elaborate scheduling.
-  for (int i = 0; i < lenChain; i += 8) {\
-    int num = ((i + 8) < lenChain ? (i + 8) : lenChain) - i;
+  for (int i = 0; i < lenChain; i += 8) {
+    const int num = ((i + 8) < lenChain ? (i + 8) : lenChain) - i;
 
     if (num < 2) continue;
 
     Instruction *first = instChain[i];
     Instruction *last = instChain[i + num - 1];
     InstChain toVectorize;
-    int64_t mask = 0;  // Load mask, but also can be used for store. (e.g. 1010 means vectorize 0th and 2th element)
+    int64_t mask = 0;  // Load mask, but also can be used for store. (e.g. 0101 means vectorize 0th and 2nd element)
+    // The 1-masked location means load location index. e.g. 0001 means 0th element, 0010 means 1st element.
 
     // Detecting loop carried dependence. Note that this is also strong condition, wil be weaken.
     // Example of Loop Carried Dependence:
     //   A[i + 1] = A[i];
-    //   A[i + 2] = A[i + 1];  in this case, we cannot vectorize because of sequential memory access pattern. 
+    //   A[i + 2] = A[i + 1];  in this case, we cannot vectorize because of sequential memory access pattern.
     std::vector<std::pair<Instruction*, const SCEV*>> SCEVItems;
     if (isLoad) {
       // For load chain, we should avoid "Load after Store".
       // Hence load are up-reordered, first chain element always can be vectorized.
-      // And last chain element is difficult to vectorize 
+      // And last chain element is difficult to vectorize
       // because there is the highest probability that at least one store exists.
       //   ADD                                                                LOAD
       //   LOAD    -> This can be vectorized. Just think LOAD goes up. ->     ADD
@@ -198,22 +194,22 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
       //   STORE                                                              STORE
       //
       //  STORE
-      //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load, 
+      //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load,
       //   LOAD      the result will change.
       mask |= 1;
       toVectorize.push_back(instChain[i]);
-    
+
       for (auto P = first->getIterator(), E = last->getIterator(); P != E; ++P)
-        if (StoreInst *storeInst = dyn_cast<StoreInst>(&*P)) 
+        if (StoreInst *storeInst = dyn_cast<StoreInst>(&*P))
           SCEVItems.push_back(make_pair(&*P, SE.getSCEV(storeInst->getPointerOperand())));
-          
-      // Note that the condition. DT.dominates means pair.first(StoreInst) is preceeding  current load Inst 
+
+      // Note that the condition. DT.dominates means pair.first(StoreInst) is preceeding  current load Inst
       // and the memory access location is same (Scalar Evolution term)
       for (int j = 1; j < num; ++j) {
         Instruction *current = instChain[i + j];
         const SCEV *loadLocation = SE.getSCEV(getLoadStorePointerOperand(current));
-        if (any_of(SCEVItems, 
-            [current, loadLocation, &DT, &SE](std::pair<Instruction*, const SCEV*> pair) { 
+        if (any_of(SCEVItems,
+            [current, loadLocation, &DT, &SE](std::pair<Instruction*, const SCEV*> pair) {
               return DT.dominates(pair.first, current) && (SE.getMinusSCEV(pair.second, loadLocation)->isZero());
             })) continue;
         mask |= (1 << j);
@@ -222,7 +218,7 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
     } else {
       // For Store chain, we should avoid "Load after Store".
       // Hence store are down-reordered, last chain element always can be vectorized.
-      // First chain element is difficult to vectorize 
+      // First chain element is difficult to vectorize
       // because there is the highest probability that at least one load exists.
       //  LOAD                                                               LOAD
       //   ...    -> This can be vectorized. Just think STORE goes down. ->  ...
@@ -230,19 +226,19 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
       //   ADD                                                              STORE
       //
       //  STORE
-      //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load, 
+      //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load,
       //   LOAD      the result will change.
       for (auto P = first->getIterator(), E = last->getIterator(); P != E; ++P)
         if (LoadInst *loadInst = dyn_cast<LoadInst>(&*P))
           SCEVItems.push_back(make_pair(&*P, SE.getSCEV(loadInst->getPointerOperand())));
 
-      // Note that the condition. DT.dominates means current store is preceeding pair.first(LoadInst) 
+      // Note that the condition. DT.dominates means current store is preceeding pair.first(LoadInst)
       // and the memory access location is same (Scalar Evolution term)
       for (int j = 0; j < num - 1; ++j) {
         Instruction *current = instChain[i + j];
         const SCEV *storeLocation = SE.getSCEV(getLoadStorePointerOperand(current));
-        if (any_of(SCEVItems, 
-            [current, storeLocation, &DT, &SE](std::pair<Instruction*, const SCEV*> pair) { 
+        if (any_of(SCEVItems,
+            [current, storeLocation, &DT, &SE](std::pair<Instruction*, const SCEV*> pair) {
               return DT.dominates(current, pair.first) && (SE.getMinusSCEV(pair.second, storeLocation)->isZero());
             })) continue;
         mask |= (1 << j);
@@ -251,23 +247,23 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
       toVectorize.push_back(instChain[i + num - 1]);
       mask |= (1 << (num - 1));
     }
-   
-    int newNum = toVectorize.size();
+
+    const int newNum = toVectorize.size();
     if (newNum < 2) continue;
 
     isChanged = true;
 
-    int dimension = 4 * int(newNum > 4) + 2 * int(newNum > 2) + int(newNum > 1) + 1;
+    const int dimension = 4 * int(newNum > 4) + 2 * int(newNum > 2) + int(newNum > 1) + 1;
 
     if (isLoad) vectorizeLoadInsts(toVectorize, dimension, mask, first);
     else vectorizeStoreInsts(toVectorize, dimension, mask, first);
-  }    
+  }
   return isChanged;
 }
 
 bool LoopVectorizePass::vectorizeMap(LoopVectorizePass::InstChainMap &instChainMap, ScalarEvolution &SE, const DataLayout &DL,  DominatorTree &DT) {
   bool isChanged = false;
-  for (std::pair<ChainID, InstChain> &chainItem : instChainMap) 
+  for (std::pair<ChainID, InstChain> &chainItem : instChainMap)
     isChanged |= vectorizeInstructions(chainItem.second, SE, DL, DT);
   return isChanged;
 }
@@ -298,7 +294,7 @@ void LoopVectorizePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FA
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
       if (AllocaInst *allocaInst = dyn_cast<AllocaInst>(&*I))
         if (isAllocaPromotable(allocaInst)) allocaInstVector.push_back(allocaInst);
-    
+
     if (allocaInstVector.empty()) break;
 
     PromoteMemToReg(allocaInstVector, DT, &AC);

@@ -41,13 +41,13 @@ private:
   ChainID getChainID(const Value *Ptr);
   std::pair<InstChainMap, InstChainMap> collectInstructions(BasicBlock *BB, TargetTransformInfo &TTI);
   Function* getVectorCallee(int dimension, LoopVectorizePass::CalleeType calleeType);
-  void fillVectorArgument(Value *address, int64_t mask, SmallVector<Value*, 8> &Args);
+  void fillVectorArgument(Value *address, const int64_t mask, SmallVector<Value*, 8> &Args);
   void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
   bool vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE, TargetTransformInfo &TTI, const DataLayout &DL, DominatorTree &DT);
   bool vectorizeMap(InstChainMap &instChainMap, ScalarEvolution &SE, const DataLayout &DL, DominatorTree &DT);
   bool vectorizeInstructions(InstChain &instChain, ScalarEvolution &SE, const DataLayout &DL, DominatorTree &DT);
-  void vectorizeLoadInsts(InstChain &instChain, int dimension, int64_t mask, Instruction *first);
-  void vectorizeStoreInsts(InstChain &instChain, int dimension, int64_t mask, Instruction *first);
+  void vectorizeLoadInsts(InstChain &instChain, const int dimension, const int64_t mask, Instruction *first);
+  void vectorizeStoreInsts(InstChain &instChain, const int dimension, const int64_t mask, Instruction *first);
 public:
   LoopVectorizePass(Module &M);
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
