@@ -46,6 +46,7 @@ bool RemoveUnusedPass::eraseUnusedInstruction(Function &F, FunctionAnalysisManag
 }
 
 void RemoveUnusedPass::eraseInstructions(SmallPtrSet<Instruction*, 16> insts) {
+  // Erase instructions safely until cannot erase.
   queue<Instruction*> safeRemoveInsts;
   while (true) {
     for (Instruction *inst : insts)
@@ -63,6 +64,7 @@ void RemoveUnusedPass::eraseInstructions(SmallPtrSet<Instruction*, 16> insts) {
 }
 
 SmallPtrSet<Value*, 16> RemoveUnusedPass::getGlobalValues(Function &F) {
+  // Get global Values of Module (parent of Function F)
   SmallPtrSet<Value*, 16> globalValues;
   Module *M = F.getParent();
 
@@ -76,6 +78,8 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getGlobalValues(Function &F) {
 
 template<typename Lambda>
 SmallPtrSet<Value*, 16> RemoveUnusedPass::getRecursiveUsers(Value *v, SmallPtrSet<Value*, 16> &checked, Lambda condition) {
+  // Get DFS users
+  // Only contain given condition
   SmallPtrSet<Value*, 16> nonInst;
   checked.insert(v);
   if (condition(v)) nonInst.insert(v);
@@ -120,6 +124,8 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getNecessaryValues(Function &F) {
   // Contain unsafe to remove values except store instruction
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
     Instruction *inst = &*I;
+    // isSafeToRemove means (!CallInst || !mayHaveSideEffect) && (!isTerminator).
+    // StoreInst is handled specially, so do not contain.
     if (!inst->isSafeToRemove() && !isa<StoreInst>(inst))
       necessaryValues.insert(inst);
   }
@@ -128,6 +134,7 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getNecessaryValues(Function &F) {
 }
 
 SmallPtrSet<Instruction*, 16> RemoveUnusedPass::getSideEffectsInst(Function &F) {
+  // return mayHaveSideEffects(exception, write) instructions in Function F
   SmallPtrSet<Instruction*, 16> sideSet;
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
     Instruction *inst = &*I;
@@ -138,6 +145,8 @@ SmallPtrSet<Instruction*, 16> RemoveUnusedPass::getSideEffectsInst(Function &F) 
 
 template<typename Lambda1, typename Lambda2>
 SmallPtrSet<Value*, 16> RemoveUnusedPass::getInstPredecessors(Instruction *inst, Lambda1 valueCondition, Lambda2 operandCondition) {
+  // BFS Instruction Predecessors.
+  // BFS search operand of operator
   SmallPtrSet<Value*, 16> predSet;
   queue<Value*> predQueue;
   predQueue.push(inst);
@@ -147,9 +156,9 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getInstPredecessors(Instruction *inst,
     if (!predSet.contains(v)) {
       if (valueCondition(v)) predSet.insert(v);
 
-      if (Instruction *I = dyn_cast<Instruction>(v))
-        for (Value *op : I->operands())
-          if (operandCondition(I, op))
+      if (Operator *OP = dyn_cast<Operator>(v))
+        for (Value *op : OP->operands())
+          if (operandCondition(OP, op))
             predQueue.push(op);
     }
   }
@@ -157,17 +166,19 @@ SmallPtrSet<Value*, 16> RemoveUnusedPass::getInstPredecessors(Instruction *inst,
 }
 
 SmallPtrSet<Value*, 16> RemoveUnusedPass::getPredecessorSet(SmallPtrSet<Value*, 16> &valueSet, Function &F) {
+  // get predecessors of given valueSet in function
   SmallPtrSet<Value*, 16> predSet;
   for (Value *v : valueSet) {
     if (Instruction *inst = dyn_cast<Instruction>(v))
       set_union(predSet, this->getInstPredecessors(inst,
       [](Value *v) { return !isa<BasicBlock>(v) && !isa<ConstantData>(v) && !isa<ConstantExpr>(v); },
-      [](Instruction *I, Value *v) { return true; }));
+      [](Operator *OP, Value *v) { return true; }));
   }
   return predSet;
 }
 
 bool RemoveUnusedPass::isNecessaryInst(Instruction *inst, SmallPtrSet<Value*, 16> &necessarySet) {
+  // check given instruction is necessary.
   Instruction *target = inst;
   if (StoreInst *sInst = dyn_cast<StoreInst>(inst)) {
     Value *ptr = sInst->getPointerOperand();
@@ -178,9 +189,13 @@ bool RemoveUnusedPass::isNecessaryInst(Instruction *inst, SmallPtrSet<Value*, 16
   
   SmallPtrSet<Value*, 16> intersectSet(necessarySet);
   set_intersect(intersectSet, this->getInstPredecessors(target,
-      [](Value *v) { return !isa<BasicBlock>(v) && !isa<ConstantData>(v) && !isa<ConstantExpr>(v); },
-      [](Instruction *I, Value *v) {
-        if (GetElementPtrInst *Ginst = dyn_cast<GetElementPtrInst>(I)) return v == Ginst->getPointerOperand();
+      // Do not contain BasicBlock
+      [](Value *v) { return !isa<BasicBlock>(v); },
+      [](Operator *OP, Value *v) {
+        // For GEP, contain only Pointer operand.
+        // Note that this condition is minimum condition except GEP condition.
+        // This can be reinforced.
+        if (GEPOperator *GEPOP = dyn_cast<GEPOperator>(OP)) return v == GEPOP->getPointerOperand();
         return true;
       }));
   if (!intersectSet.empty()) return true;
@@ -189,6 +204,13 @@ bool RemoveUnusedPass::isNecessaryInst(Instruction *inst, SmallPtrSet<Value*, 16
 }
 
 SmallPtrSet<Value*, 16> RemoveUnusedPass::getUsedValues(Function &F) {
+  // Return may used values set in function
+  // Ideally, the return set does not contain used values.
+  // Main idea of getUsedValues is as follows.
+  // 0. Init necessary values
+  // 1. Extend necessary values by checking and inserting instructions may cause SideEffects
+  // 2. For neceesary values, contains their predecessors
+  // 3. Goto 1 until necessary values set does not change.
   SmallPtrSet<Value*, 16> necessaryValues = this->getNecessaryValues(F);
   SmallPtrSet<Instruction*, 16> sideInsts = this->getSideEffectsInst(F);
 
