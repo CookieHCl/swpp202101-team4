@@ -63,7 +63,7 @@ PreservedAnalyses BranchPredictPass::run(Function &F, FunctionAnalysisManager &F
       // heuristic: use recursive if max prob < 0.9, use prob if max prob >= 0.9
       // use floating point to avoid overflow
       bool isProbUnreliable = std::max(TrueBBProb, FalseBBProb).getNumerator()
-        < 0.9 * BranchProbability::getDenominator();
+        < PROB_THRESHOLD * BranchProbability::getDenominator();
 
       logs() << "Contradiction; "
           << (isProbUnreliable ? "Using recursive\n" : "Using probability\n");

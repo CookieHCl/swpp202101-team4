@@ -14,6 +14,9 @@ using namespace llvm::PatternMatch;
 
 class BranchPredictPass : public PassInfoMixin<BranchPredictPass> {
 private:
+  // threshold to use probability
+  const long double PROB_THRESHOLD = 0.9L;
+
   const bool isVerbose;
 
   // stream for logging; only prints if verbose
