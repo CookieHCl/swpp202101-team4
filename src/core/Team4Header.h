@@ -8,6 +8,6 @@
 #include "ArithmeticPass.h"
 #include "FunctionInlinePass.h"
 #include "PhierasePass.h"
-#include "RemoveUnused.h"
+#include "RemoveUnusedPass.h"
 
 #endif
