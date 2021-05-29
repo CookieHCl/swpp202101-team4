@@ -2,6 +2,6 @@
 #define TEAM4HEADER_H
 
 #include "FunctionInlinePass.h"
-#include "RemoveUnused.h"
+#include "RemoveUnusedPass.h"
 
 #endif
