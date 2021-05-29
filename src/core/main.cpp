@@ -43,7 +43,9 @@ static cl::opt<bool> optEmitLLVM(
 enum Opts {
   Arithmetic,
   BranchPredict,
+  GVN,
   FunctionInline,
+  Phierase,
   RemoveUnused,
   SimplifyCFG
 };
@@ -55,7 +57,9 @@ static cl::bits<Opts, unsigned> optOptimizations(
     cl::values(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
       clEnumVal(BranchPredict, "Set most used branch to false branch"),
+      clEnumValN(Opts::GVN, "GVN", "Constant folding & eliminate fully redundant instructions and dead load"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
+      clEnumVal(Phierase, "Erase phi node by copying basicblock."),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
       clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
 
@@ -105,14 +109,17 @@ int main(int argc, char *argv[]) {
 
   // Add existing IR passes
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(Opts::GVN, FPM.addPass(llvm::GVN()))
 
   // Add IR passes
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
+  IFSET(Opts::Phierase, FPM.addPass(PhierasePass()))
   IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
   IFSET(Opts::BranchPredict, FPM.addPass(BranchPredictPass(optPrintProgress)))
 
   // Add existing IR passes
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(Opts::GVN, FPM.addPass(llvm::GVN()))
 
   // Execute IR passes
   IFSET(Opts::FunctionInline, MPM.addPass(FunctionInlinePass()))
