@@ -11,7 +11,7 @@
  */ 
 
 
-LoopVectorizePass::LoopVectorizePass(Module &M) : PassInfoMixin() {
+LoopVectorizePass::LoopVectorizePass(Module &M, bool isVerbose) : PassInfoMixin(), isVerbose(isVerbose) {
   LLVMContext &context = M.getContext();
   this->Int64Type = Type::getInt64Ty(context);
   this->Int64PtrType = Type::getInt64PtrTy(context);
@@ -153,6 +153,8 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
   unsigned PtrBitWidth = DL.getPointerSizeInBits(0);
   APInt Size(PtrBitWidth, DL.getTypeStoreSize(Ptr->getType()->getPointerElementType()));
   const int lenChain = instChain.size();
+  logs() << "PtrWidth : " << PtrBitWidth << "\nSize     : " << Size << "\n";
+  logs() << "PtrSCEV  : " << *PtrSCEV << "\nIsLoad   : " << (isLoad ? "true" : "false") << "\n";
 
   // This is very strong condition. Should be weaken later.
   // This hard condition covers marginal condition. e.g. range(0, 30, 4) is not vectorized.
@@ -160,9 +162,12 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
   for (int i = 1; i < lenChain; ++i) {
     const SCEV *PtrSCEVA = SE.getSCEV(getLoadStorePointerOperand(instChain[i]));
     const SCEV *ConstDelta = SE.getConstant(Size * i);
-    const SCEV *delta = SE.getMinusSCEV(PtrSCEVA, PtrSCEV);
-    if (delta != ConstDelta) return isChanged;
+    const SCEV *Delta = SE.getMinusSCEV(PtrSCEVA, PtrSCEV);
+    logs() << "PtrSCEVA : " << *PtrSCEVA << " ( Delta : " << *Delta << ")\n";
+    if (Delta != ConstDelta) return isChanged;
   }
+
+  logs() << "[Chain is CONSECUTIVE]\n";
 
   // Max Vectorize unit is 8. Therefore, split in 8.
   // This is not the best case: 0-6 impossible and 7 possible + 8 possible and 9-15 impossible
@@ -263,8 +268,12 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
 
 bool LoopVectorizePass::vectorizeMap(LoopVectorizePass::InstChainMap &instChainMap, ScalarEvolution &SE, const DataLayout &DL,  DominatorTree &DT) {
   bool isChanged = false;
-  for (std::pair<ChainID, InstChain> &chainItem : instChainMap)
+  for (std::pair<ChainID, InstChain> &chainItem : instChainMap) {
+    logs() << "[Source] " << *chainItem.first << "\n";
+    for (unsigned idx = 0; idx < chainItem.second.size(); ++idx)
+      logs() << ((idx < chainItem.second.size() - 1) ? "|- " : "`- ") << *chainItem.second[idx] << "\n";
     isChanged |= vectorizeInstructions(chainItem.second, SE, DL, DT);
+  }
   return isChanged;
 }
 
@@ -314,10 +323,12 @@ PreservedAnalyses LoopVectorizePass::run(Function &F, FunctionAnalysisManager &F
   TargetTransformInfo &TTI = FAM.getResult<TargetIRAnalysis>(F);
   const DataLayout &DL = F.getParent()->getDataLayout();
 
+  logs() << "[LoopVectorize Progress in @" << F.getName() << "]\n";
   bool isChanged = false;
   for (Loop *L : LI.getLoopsInPreorder())
     if (L->isInnermost())
       isChanged |= this->vectorize(L, LI, SE, TTI, DL, DT);
 
+  logs() << "[" << (isChanged ? "(CHANGED) " : "")<< "END LoopVectorize Progress in @" << F.getName() << "]\n\n";
   return isChanged ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

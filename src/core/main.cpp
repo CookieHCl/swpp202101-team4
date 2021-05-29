@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
 
   // Add IR passes
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
-  IFSET(Opts::LoopVectorize, FPM.addPass(LoopVectorizePass(*M)))
+  IFSET(Opts::LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
   IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
 
   // Add existing IR passes

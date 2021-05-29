@@ -29,6 +29,8 @@ class LoopVectorizePass : public llvm::PassInfoMixin<LoopVectorizePass> {
   using InstChain = SmallVector<Instruction*, 8>;
   using InstChainMap = MapVector<ChainID, InstChain>;
 private:
+  bool isVerbose;
+  raw_ostream& logs() const { return isVerbose ? outs() : nulls(); }
   Type *VoidType, *Int64Type, *Int64PtrType, *Vec2Int64Type, *Vec4Int64Type, *Vec8Int64Type;
   Function *extractElement2, *extractElement4, *extractElement8, *vLoad2, *vLoad4, *vLoad8; 
   Function *vStore2, *vStore4, *vStore8;
@@ -49,7 +51,7 @@ private:
   void vectorizeLoadInsts(InstChain &instChain, const int dimension, const int64_t mask, Instruction *first);
   void vectorizeStoreInsts(InstChain &instChain, const int dimension, const int64_t mask, Instruction *first);
 public:
-  LoopVectorizePass(Module &M);
+  LoopVectorizePass(Module &M, bool isVerbose = false);
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
