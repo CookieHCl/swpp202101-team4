@@ -44,6 +44,7 @@ enum Opts {
   Arithmetic,
   GVN,
   FunctionInline,
+  Phierase,
   RemoveUnused,
   SimplifyCFG
 };
@@ -56,6 +57,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
       clEnumValN(Opts::GVN, "GVN", "Constant folding & eliminate fully redundant instructions and dead load"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
+      clEnumVal(Phierase, "Erase phi node by copying basicblock."),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
       clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
 
@@ -109,6 +111,7 @@ int main(int argc, char *argv[]) {
 
   // Add IR passes
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
+  IFSET(Opts::Phierase, FPM.addPass(PhierasePass()))
   IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
 
   // Add existing IR passes
