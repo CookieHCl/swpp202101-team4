@@ -7,6 +7,7 @@
 
 // IR passes
 #include "ArithmeticPass.h"
+#include "BranchPredictPass.h"
 #include "FunctionInlinePass.h"
 #include "PhierasePass.h"
 #include "RemoveUnusedPass.h"
