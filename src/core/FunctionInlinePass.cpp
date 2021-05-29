@@ -1,4 +1,4 @@
-#include "functionInlinePass.h"
+#include "FunctionInlinePass.h"
 
 
 /*************************************************
@@ -20,8 +20,8 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
   });
 
   //Register graph for the module.
-  RegisterGraph tRG(M);
-  RegisterGraph *RG = &tRG;
+  unique_ptr<Module> copyM = CloneModule(M);
+  RegisterGraph RG(*copyM);
 
   // caller to inline and Function's numColor
   vector<pair<CallBase *, unsigned> > do_inline;
@@ -32,7 +32,8 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     if(F.isDeclaration()) continue;
     // The number of registers can be found through
     // backend::RegisterGraph.getNumColors(Function*)
-    numColors[&F] = RG->getNumColors(&F);
+    Function* copyF = copyM->getFunction(F.getName());
+    numColors[&F] = RG.getNumColors(copyF);
   }
 
   for(Function& F : M) {
@@ -95,5 +96,5 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     InlineFunction(*caller, IFI, nullptr, false, nullptr);
   }
 
-  return PreservedAnalyses::all();
+  return PreservedAnalyses::none();
 }
