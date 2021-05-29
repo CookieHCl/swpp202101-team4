@@ -6,7 +6,8 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: nounwind uwtable
 define dso_local i32 @getmaxplus100(i32 %x) #0 {
 ; CHECK: start getmaxplus100 1:
-
+; CHECK: ret
+; CHECK: ret
 entry:
   %cmp = icmp slt i32 %x, 10
   br i1 %cmp, label %if.then, label %if.else
