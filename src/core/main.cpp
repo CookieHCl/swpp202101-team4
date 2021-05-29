@@ -42,7 +42,7 @@ static cl::opt<bool> optEmitLLVM(
 
 enum Opts {
   Arithmetic,
-  Gvn,
+  GVN,
   FunctionInline,
   RemoveUnused,
   SimplifyCFG
@@ -54,7 +54,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
     cl::location(optOptimizationBits), cl::CommaSeparated, cl::cat(optCategory),
     cl::values(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
-      clEnumVal(Gvn, "Constant folding & eliminate fully redundant instructions and dead load"),
+      clEnumValN(Opts::GVN, "GVN", "Constant folding & eliminate fully redundant instructions and dead load"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
       clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
 
   // Add existing IR passes
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
-  IFSET(Opts::Gvn, FPM.addPass(GVN()))
+  IFSET(Opts::GVN, FPM.addPass(llvm::GVN()))
 
   // Add IR passes
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
 
   // Add existing IR passes
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
-  IFSET(Opts::Gvn, FPM.addPass(GVN()))
+  IFSET(Opts::GVN, FPM.addPass(llvm::GVN()))
 
   // Execute IR passes
   IFSET(Opts::FunctionInline, MPM.addPass(FunctionInlinePass()))
