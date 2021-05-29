@@ -42,6 +42,7 @@ static cl::opt<bool> optEmitLLVM(
 
 enum Opts {
   Arithmetic,
+  BranchPredict,
   GVN,
   FunctionInline,
   Phierase,
@@ -55,6 +56,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
     cl::location(optOptimizationBits), cl::CommaSeparated, cl::cat(optCategory),
     cl::values(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
+      clEnumVal(BranchPredict, "Set most used branch to false branch"),
       clEnumValN(Opts::GVN, "GVN", "Constant folding & eliminate fully redundant instructions and dead load"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
       clEnumVal(Phierase, "Erase phi node by copying basicblock."),
@@ -113,6 +115,7 @@ int main(int argc, char *argv[]) {
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
   IFSET(Opts::Phierase, FPM.addPass(PhierasePass()))
   IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
+  IFSET(Opts::BranchPredict, FPM.addPass(BranchPredictPass(optPrintProgress)))
 
   // Add existing IR passes
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
