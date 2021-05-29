@@ -43,9 +43,9 @@ static cl::opt<bool> optEmitLLVM(
 enum Opts {
   Arithmetic,
   FunctionInline,
+  LoopVectorize,
   RemoveUnused,
   SimplifyCFG,
-  LoopVectorize,
 };
 
 static unsigned optOptimizationBits;
@@ -55,9 +55,10 @@ static cl::bits<Opts, unsigned> optOptimizations(
     cl::values(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
+      clEnumVal(LoopVectorize, "Vectorize load/store instruction in loop"),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
-      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG"),
-      clEnumVal(LoopVectorize, "Vectorize load/store instruction")));
+      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")
+      ));
 
 #define IFSET(enum, X) if (optOptimizations.isSet(enum)) { X; }
 
