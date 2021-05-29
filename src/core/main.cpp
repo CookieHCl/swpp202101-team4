@@ -48,6 +48,8 @@ enum Opts {
   SimplifyCFG,
 };
 
+#define OPT_ENUM_VAL(enum, desc) clEnumValN(Opts::enum, #enum, desc)
+
 static unsigned optOptimizationBits;
 static cl::bits<Opts, unsigned> optOptimizations(
     "passes", cl::desc("Apply only selected optimizations:"),

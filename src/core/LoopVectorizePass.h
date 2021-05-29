@@ -16,10 +16,6 @@
 
 #include <vector>
 
-#define LVTWO(x) x, x
-#define DECLARE_VECTOR_FUNCTION(retType, name, argTypeArray, M) \
-  Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M)\
-
 using namespace llvm;
 using namespace std;
 
@@ -34,7 +30,7 @@ private:
   Type *VoidType, *Int64Type, *Int64PtrType, *Vec2Int64Type, *Vec4Int64Type, *Vec8Int64Type;
   Function *extractElement2, *extractElement4, *extractElement8, *vLoad2, *vLoad4, *vLoad8; 
   Function *vStore2, *vStore4, *vStore8;
-  enum CalleeType : unsigned {
+  enum class CalleeType : unsigned {
     LOAD = 0,
     EXTRACT = 1,
     STORE = 2

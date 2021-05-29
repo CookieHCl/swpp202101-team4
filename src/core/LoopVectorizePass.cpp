@@ -1,5 +1,5 @@
 #include "LoopVectorizePass.h"
-  
+
 
 /*
  *                  Loop Vectorize Pass
@@ -9,6 +9,11 @@
  *  Convert memory access instructions into vector instructions.
  *  
  */ 
+
+
+#define LVTWO(x) x, x
+#define DECLARE_VECTOR_FUNCTION(retType, name, argTypeArray, M) \
+  Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M)\
 
 
 LoopVectorizePass::LoopVectorizePass(Module &M, bool isVerbose) : PassInfoMixin(), isVerbose(isVerbose) {
