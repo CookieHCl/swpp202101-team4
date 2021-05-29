@@ -81,7 +81,6 @@ define dso_local i64 @diff(i64 %0, i64 %1) #0 {
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @main() #0 {
-;   CHECK:      sp = sub sp 92 64
 ;   CHECK-NOT:	call diff
 ;   CHECK-NOT:	call max
 ;   CHECK-NOT:	call min
