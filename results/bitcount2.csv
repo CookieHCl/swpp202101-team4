@@ -8,3 +8,4 @@ Update skeleton code from https://github.com/snu-sf-class/swpp202101-compiler,22
 Support compiler options (#17),222.8857142857143,74.8,458.2,131.6,18.0,32.2,401.4,444.0
 Fix wrong return value (#35),222.8857142857143,74.8,458.2,131.6,18.0,32.2,401.4,444.0
 Automate testing benchmarks (#23),222.8857142857143,74.8,458.2,131.6,18.0,32.2,401.4,444.0
+Add GVNPass (#25),222.8857142857143,74.8,458.2,131.6,18.0,32.2,401.4,444.0
