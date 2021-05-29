@@ -5,7 +5,7 @@
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 
 // IR passes
-#include "Arithmeticpass.h"
+#include "ArithmeticPass.h"
 #include "FunctionInlinePass.h"
 #include "PhierasePass.h"
 #include "RemoveUnused.h"
