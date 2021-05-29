@@ -40,10 +40,13 @@ static cl::opt<bool> optEmitLLVM(
     "emit-llvm", cl::desc("Write output as LLVM IR"),
     cl::cat(optCategory));
 
-enum Opts {
+enum class Opts {
   Arithmetic,
+  BranchPredict,
+  GVN,
   FunctionInline,
   LoopVectorize,
+  Phierase,
   RemoveUnused,
   SimplifyCFG,
 };
@@ -55,14 +58,17 @@ static cl::bits<Opts, unsigned> optOptimizations(
     "passes", cl::desc("Apply only selected optimizations:"),
     cl::location(optOptimizationBits), cl::CommaSeparated, cl::cat(optCategory),
     cl::values(
-      clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
-      clEnumVal(FunctionInline, "Inline functions if possible"),
-      clEnumVal(LoopVectorize, "Vectorize load/store instruction in loop"),
-      clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
-      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")
-      ));
+      OPT_ENUM_VAL(Arithmetic, "Replace with cheaper arithmetic operations"),
+      OPT_ENUM_VAL(BranchPredict, "Set most used branch to false branch"),
+      OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
+      OPT_ENUM_VAL(FunctionInline, "Inline functions if possible"),
+      OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
+      OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock."),
+      OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
+      OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
+    ));
 
-#define IFSET(enum, X) if (optOptimizations.isSet(enum)) { X; }
+#define IFSET(enum, X) if (optOptimizations.isSet(Opts::enum)) { X; }
 
 int main(int argc, char *argv[]) {
   //Parse command line arguments
@@ -107,18 +113,22 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // Add existing IR passes
-  IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
 
   // Add IR passes
-  IFSET(Opts::LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
-  IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
-  IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
+  IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
+  IFSET(Arithmetic, FPM.addPass(ArithmeticPass()))
+  IFSET(Phierase, FPM.addPass(PhierasePass()))
+  IFSET(RemoveUnused, FPM.addPass(RemoveUnusedPass()))
+  IFSET(BranchPredict, FPM.addPass(BranchPredictPass(optPrintProgress)))
 
   // Add existing IR passes
-  IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(GVN, FPM.addPass(GVN()))
 
   // Execute IR passes
-  IFSET(Opts::FunctionInline, MPM.addPass(FunctionInlinePass()))
+  IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()))
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
 
