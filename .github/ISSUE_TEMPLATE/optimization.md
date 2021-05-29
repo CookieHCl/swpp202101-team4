@@ -2,7 +2,7 @@
 name: Optimization
 about: Suggest an idea for this project
 title: "[Sprint ?] 최적화 할것 요약"
-labels: enhancement
+labels: optimization
 assignees: ''
 
 ---
