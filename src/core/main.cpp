@@ -43,6 +43,7 @@ static cl::opt<bool> optEmitLLVM(
 enum Opts {
   Arithmetic,
   FunctionInline,
+  Phierase,
   RemoveUnused,
   SimplifyCFG
 };
@@ -54,6 +55,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
     cl::values(
       clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
       clEnumVal(FunctionInline, "Inline functions if possible"),
+      clEnumVal(Phierase, "Erase phi node by copying basicblock."),
       clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
       clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
 
@@ -106,6 +108,7 @@ int main(int argc, char *argv[]) {
 
   // Add IR passes
   IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
+  IFSET(Opts::Phierase, FPM.addPass(PhierasePass()))
   IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
 
   // Add existing IR passes
@@ -115,6 +118,7 @@ int main(int argc, char *argv[]) {
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(Opts::Phierase, FPM.addPass(PhierasePass()))
 
   // Execute IR passes
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
