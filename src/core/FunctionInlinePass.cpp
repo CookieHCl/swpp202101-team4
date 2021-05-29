@@ -21,8 +21,7 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
 
   //Register graph for the module.
   unique_ptr<Module> copyM = CloneModule(M);
-  RegisterGraph tRG(*copyM);
-  RegisterGraph *RG = &tRG;
+  RegisterGraph RG(*copyM);
 
   // caller to inline and Function's numColor
   vector<pair<CallBase *, unsigned> > do_inline;
@@ -33,15 +32,8 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     if(F.isDeclaration()) continue;
     // The number of registers can be found through
     // backend::RegisterGraph.getNumColors(Function*)
-    for(Function& copyF : *copyM) {
-
-      if(copyF.isDeclaration()) continue;
-
-      if(F.getName() == copyF.getName()) {
-        numColors[&F] = RG->getNumColors(&copyF);
-        break;
-      }
-    }
+    Function* copyF = copyM->getFunction(F.getName());
+    numColors[&F] = RG.getNumColors(copyF);
   }
 
   for(Function& F : M) {
