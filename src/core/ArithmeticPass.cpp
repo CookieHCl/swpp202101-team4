@@ -1,4 +1,4 @@
-#include "Team4Header.h"
+#include "ArithmeticPass.h"
 
 PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM) {
 
@@ -105,5 +105,5 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
     }
   }
 
-  return PreservedAnalyses::all();
+  return PreservedAnalyses::none();
 }
