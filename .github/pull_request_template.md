@@ -1,11 +1,12 @@
 <!--
 # 할일 체크리스트
-- #2에 PR를 채워넣을 체크리스트가 있는가?
+- Issue #2에 PR를 채워넣었는가?
 - 제목이 [Sprint ?]로 시작하는가?
-- Projects를 할당했는가?
+- Label과 Projects를 설정했는가?
 - 하나의 feature만 구현하는가?
 - unit test를 추가했는가?
 - Closes #이슈번호를 썼는가?
+- https://github.com/CookieHCl/swpp202101-team4/blob/main/CONTRIBUTING.md
 -->
 <!-- PR는 보고 이해할 수 있게 (특히 리뷰어가 이해할 수 있게) 적는 것을 목표로 함 -->
 

@@ -5,9 +5,9 @@
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 
 // IR passes
-#include "Arithmeticpass.h"
+#include "ArithmeticPass.h"
 #include "FunctionInlinePass.h"
-#include "RemoveUnused.h"
+#include "RemoveUnusedPass.h"
 
 
 #include "LoopVectorizePass.h"
