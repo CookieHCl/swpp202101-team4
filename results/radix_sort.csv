@@ -7,3 +7,4 @@ Add SimplifyCFGPass (#9),nan,nan,nan,nan,nan,nan,nan
 Update skeleton code from https://github.com/snu-sf-class/swpp202101-compiler,nan,nan,nan,nan,nan,nan,nan
 Support compiler options (#17),nan,nan,nan,nan,nan,nan,nan
 Fix wrong return value (#35),nan,nan,nan,nan,nan,nan,nan
+Automate testing benchmarks (#23),5401022.23315,9899.0,143988.4,1377444.4,308358.6,902044.3,29664398.6989
