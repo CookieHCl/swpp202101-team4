@@ -6,3 +6,4 @@ Arithmetic pass (#8),nan,nan,nan,nan,nan,nan,nan,nan
 Add SimplifyCFGPass (#9),nan,nan,nan,nan,nan,nan,nan,nan
 Update skeleton code from https://github.com/snu-sf-class/swpp202101-compiler,nan,nan,nan,nan,nan,nan,nan,nan
 Support compiler options (#17),nan,nan,nan,nan,nan,nan,nan,nan
+Fix wrong return value (#35),nan,nan,nan,nan,nan,nan,nan,nan
