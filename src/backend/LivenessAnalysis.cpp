@@ -242,16 +242,26 @@ vector<Value *> RegisterGraph::PerfectEliminationOrdering(vector<Value *> &value
 
     //if not defined function, do not consider anyway
     if(values.size() == 0) return vector<Value*>();
+
+    map<int, Value*> initSigma;
+    map<Value*,int> valueIdx;
+    int idx = 0;
+    for (auto *v : values) {
+        initSigma[idx] = v;
+        valueIdx[v] = idx;
+        idx++;
+    }
+
     //Initially, Sigma contains a single set of all value in values.
-    list<set<Value *>> Sigma = {set<Value *>(values.begin(), values.end())};
+    list<map<int, Value *>> Sigma{initSigma};
     vector<Value *> PEO;
 
     while (Sigma.size() > 0)
     {
-
         //retrieve one value v from Sigma[0] and delete it.
-        Value *v = *(Sigma.begin()->begin());
-        Sigma.begin()->erase(Sigma.begin()->begin());
+        auto bg = Sigma.begin()->begin();
+        Value *v = bg->second;
+        Sigma.begin()->erase(bg);
         //if Sigma[0] is empty, remove it.
         if (Sigma.begin()->empty())
         {
@@ -267,7 +277,7 @@ vector<Value *> RegisterGraph::PerfectEliminationOrdering(vector<Value *> &value
         //for all members in Sigma, insert empty set
         for (auto it = Sigma.begin(); it != Sigma.end(); ++it)
         {
-            Sigma.insert(it, set<Value *>());
+            Sigma.insert(it, map<int, Value *>());
         }
 
         //for all nodes connected to v,
@@ -276,19 +286,21 @@ vector<Value *> RegisterGraph::PerfectEliminationOrdering(vector<Value *> &value
             //search if w is still in Sigma.
             for (auto it = Sigma.begin(); it != Sigma.end(); ++it)
             {
-                auto wLoc = it->find(w);
+                int wIdx = valueIdx.find(w)->second;
+                auto wItr = it->find(wIdx);
                 //if w exists in *it,
-                if (wLoc != it->end())
+                if (wItr != it->end())
                 {
                     //move w to the set infront.
                     auto it_prev = it;
                     --it_prev;
-                    it_prev->insert(w);
-                    it->erase(wLoc);
+                    it_prev->insert({wIdx, w});
+                    it->erase(wItr);
                 }
             }
         }
-        Sigma.remove(set<Value *>());
+
+        Sigma.remove(map<int, Value *>());
     }
 
     // construct a temporary set for instruction owner check
@@ -435,15 +447,6 @@ bool RegisterGraph::doNotConsider(Instruction &I)
     if (UnfoldVectorInstPass::VLOADS.find(fn) != UnfoldVectorInstPass::VLOADS.end()) return true;
 
     return false;
-}
-
-//---------------------------------------------------------------
-//class LivenessAnalysis
-//---------------------------------------------------------------
-
-RegisterGraph LivenessAnalysis::run(Module &M, ModuleAnalysisManager &MAM)
-{
-    return RegisterGraph(M);
 }
 
 } // namespace backend
