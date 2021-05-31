@@ -131,16 +131,6 @@ private:
   void InverseColorMap();
 };
 
-class LivenessAnalysis : public AnalysisInfoMixin<LivenessAnalysis>
-{
-  friend AnalysisInfoMixin<LivenessAnalysis>;
-  static AnalysisKey Key;
-
-public:
-  using Result = RegisterGraph;
-  RegisterGraph run(Module &M, ModuleAnalysisManager &MAM);
-};
-
 extern map<Instruction *, unsigned int> ReservedColor;
 
 } // namespace backend
