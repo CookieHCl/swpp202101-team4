@@ -7,6 +7,8 @@ Add SimplifyCFGPass (#9),nan,nan,nan,nan,nan,nan,nan,nan
 Update skeleton code from https://github.com/snu-sf-class/swpp202101-compiler,nan,nan,nan,nan,nan,nan,nan,nan
 Support compiler options (#17),nan,nan,nan,nan,nan,nan,nan,nan
 Fix wrong return value (#35),nan,nan,nan,nan,nan,nan,nan,nan
+Fix RemoveUnusedPass bug (#31),1207.8285714285714,39.4,39.4,1830.5,1345.3,860.1,1927.5,2412.6
+Function inline pass bug fix (#20),1207.8285714285714,39.4,39.4,1830.5,1345.3,860.1,1927.5,2412.6
 Automate testing benchmarks (#23),1207.8285714285714,39.4,39.4,1830.5,1345.3,860.1,1927.5,2412.6
 Add GVNPass (#25),1207.8285714285714,39.4,39.4,1830.5,1345.3,860.1,1927.5,2412.6
 Phierasepass (#27),1163.0857142857144,39.4,39.4,1762.1,1294.9,827.7,1855.5,2322.6
