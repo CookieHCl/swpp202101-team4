@@ -33,6 +33,7 @@
 - `--passes=<value>`를 사용할 경우 지정한 Pass들만 사용할 수 있다.  
   이때 `<value>`는 Pass 이름들을 쉼표로 구분한 형식이다.  
   Pass 이름은 `enum Opts`에서 지정한 이름들이고, `-h`로 볼 수 있다.
+- `--off`를 사용할 경우 지정한 Pass들만 사용하는 대신 지정한 Pass들만 제외한다.
 - 이 외에는 두 개의 옵션 `<input file>`과 `<output file>`을 받는다.  
   이때 `<output file>`을 생략하거나 `-`로 지정하면 stdout으로 출력한다.
 
