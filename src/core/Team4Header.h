@@ -9,10 +9,9 @@
 #include "ArithmeticPass.h"
 #include "BranchPredictPass.h"
 #include "FunctionInlinePass.h"
+#include "LoopVectorizePass.h"
+#include "MemoryToStackPass.h"
 #include "PhierasePass.h"
 #include "RemoveUnusedPass.h"
-
-
-#include "LoopVectorizePass.h"
 
 #endif

@@ -46,6 +46,7 @@ enum class Opts {
   FunctionInline,
   GVN,
   LoopVectorize,
+  MemoryToStack,
   Phierase,
   RemoveUnused,
   SimplifyCFG,
@@ -63,6 +64,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(FunctionInline, "Inline functions if possible"),
       OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
+      OPT_ENUM_VAL(MemoryToStack, "Use stack instead of heap"),
       OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock."),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
       OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
@@ -130,6 +132,7 @@ int main(int argc, char *argv[]) {
   // Execute IR passes
   IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()))
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  IFSET(MemoryToStack, MPM.addPass(MemoryToStackPass(optPrintProgress)))
   MPM.run(*M, MAM);
 
   // If flag is set, write output as LLVM assembly
