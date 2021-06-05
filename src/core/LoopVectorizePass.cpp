@@ -11,6 +11,7 @@
  */ 
 
 
+#define ADDRECSCEV_START_INDEX 0
 #define LVTWO(x) x, x
 #define DECLARE_VECTOR_FUNCTION(retType, name, argTypeArray, M) \
   Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M)\
@@ -141,13 +142,121 @@ void LoopVectorizePass::vectorizeStoreInsts(InstChain &instChain, const int dime
     inst->eraseFromParent();
 }
 
+template<typename Type> int LoopVectorizePass::getSCEVOperandUnmatchedIndex(const Type *scev1, const Type *scev2) {
+  if (scev1->getNumOperands() != scev2->getNumOperands()) return -1;
+  if (scev1->getNoWrapFlags() != scev2->getNoWrapFlags()) return -1;
+
+  int unmatchedIndex = -1;
+  for (int i = 0; i < scev1->getNumOperands(); ++i) {
+    const SCEV *op1 = scev1->getOperand(i);
+    const SCEV *op2 = scev2->getOperand(i);
+    if (op1 == op2) continue;
+
+    if (unmatchedIndex >= 0) return -1; 
+  
+    unmatchedIndex = i;
+  }
+  return unmatchedIndex;
+}
+
+// return is consecutive and delta (scev2 - scev1)
+LoopVectorizePass::ConProperty LoopVectorizePass::measureConsecutiveProperty(const SCEV *scev1, const SCEV *scev2, ScalarEvolution &SE) {
+  // todo recursive 
+
+  SCEVTypes scevType = scev1->getSCEVType();
+
+  if (scevType != scev2->getSCEVType()) return {false, 0};
+
+  if (scev1 == scev2) return {true, 0};
+
+  const SCEV *Delta = SE.getMinusSCEV(scev2, scev1);
+  if (const SCEVConstant *constDelta = dyn_cast<SCEVConstant>(Delta)) {
+    APInt Int = constDelta->getAPInt();
+    return {true, Int.getSExtValue()};
+  }
+
+  switch (scevType) {
+    case SCEVTypes::scAddExpr: {
+      const SCEVAddExpr *addSCEV1 = dyn_cast<SCEVAddExpr>(scev1);
+      const SCEVAddExpr *addSCEV2 = dyn_cast<SCEVAddExpr>(scev2);
+      int unmatched = this->getSCEVOperandUnmatchedIndex(addSCEV1, addSCEV2);
+      if (unmatched < 0) return {false, 0};
+
+      return this->measureConsecutiveProperty(addSCEV1->getOperand(unmatched), addSCEV2->getOperand(unmatched), SE);
+    }
+    case SCEVTypes::scAddRecExpr: {
+      const SCEVAddRecExpr *addRecSCEV1 = dyn_cast<SCEVAddRecExpr>(scev1);
+      const SCEVAddRecExpr *addRecSCEV2 = dyn_cast<SCEVAddRecExpr>(scev2);
+      int unmatched = this->getSCEVOperandUnmatchedIndex(addRecSCEV1, addRecSCEV2);
+      if (unmatched != ADDRECSCEV_START_INDEX) return {false, 0};
+
+      return this->measureConsecutiveProperty(addRecSCEV1->getStart(), addRecSCEV2->getStart(), SE);
+    }
+    case SCEVTypes::scTruncate:
+    case SCEVTypes::scZeroExtend:
+    case SCEVTypes::scSignExtend: {
+      const SCEVIntegralCastExpr *intSCEV1 = dyn_cast<SCEVIntegralCastExpr>(scev1);
+      const SCEVIntegralCastExpr *intSCEV2 = dyn_cast<SCEVIntegralCastExpr>(scev2);
+      return this->measureConsecutiveProperty(intSCEV1->getOperand(), intSCEV2->getOperand(), SE);
+    }
+    case SCEVTypes::scMulExpr: {
+      const SCEVMulExpr *mulSCEV1 = dyn_cast<SCEVMulExpr>(scev1);
+      const SCEVMulExpr *mulSCEV2 = dyn_cast<SCEVMulExpr>(scev2);
+      int unmatched = this->getSCEVOperandUnmatchedIndex(mulSCEV1, mulSCEV2);
+      if (unmatched < 0) return {false, 0};
+
+      unsigned multiplier = 1;
+      for (int i = 0; i < mulSCEV1->getNumOperands(); ++i) {
+        if (i == unmatched) continue;
+
+        if (const SCEVConstant *constSCEV = dyn_cast<SCEVConstant>(mulSCEV1->getOperand(i))) {
+          APInt Int = constSCEV->getAPInt();
+          if (Int.getActiveBits() > 64) return {false, 0};
+          multiplier *= Int.getZExtValue();
+        } else return {false, 0};
+      }
+
+      ConProperty property = this->measureConsecutiveProperty(mulSCEV1->getOperand(unmatched), mulSCEV2->getOperand(unmatched), SE);
+
+      return {property.first, property.second * multiplier};
+    }
+    default: return {false, 0};
+  }
+}
+
+vector<LoopVectorizePass::ConScheme> LoopVectorizePass::createSchemes(LoopVectorizePass::InstChain &instChain, ScalarEvolution &SE) {
+  vector<ConScheme> schemes;
+  int numChain = instChain.size();
+  for (int i = 0; i < numChain; ++i) {
+    Value *Ptr = getLoadStorePointerOperand(instChain[i]);
+    const SCEV *scev = SE.getSCEV(Ptr);
+    schemes.push_back(ConScheme(i, scev, Ptr, 0));
+  }
+
+  // Compare n * (n-1) / 2 times to check consecutivity
+  for (int i = 0; i < numChain; ++i)
+    for (int j = i + 1; j < numChain; ++j) {
+      ConProperty conProperty = measureConsecutiveProperty(schemes[i].scev, schemes[j].scev, SE);
+      if (!conProperty.first) continue;
+
+      const int delta = conProperty.second;
+      schemes[j].setSourceID(schemes[i].sourceID);
+      schemes[j].setDispl(schemes[i].displ + delta);
+    }
+
+  for (ConScheme &scheme : schemes)
+    logs() << "[" << *scheme.scev << "](" << scheme.v->getName() << ") source " << scheme.sourceID << " displ " << scheme.displ << "\n";
+
+  return schemes;
+}
+
 // Vectorize Instructions composed with three step
 // 1) Check whether the memory access are consecutive.
 // 2) Check whether loop carried dependence exists.
 // 3) Vectorize
 // 3-1) Reorder instruction. For load, up-reorder and store, down-reorder
 // 3-2) Add function call (vload/vstore) and replace instruction.
-bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &instChain, ScalarEvolution &SE,
+bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &instChain, Loop *L,  ScalarEvolution &SE,
                                               const DataLayout &DL, DominatorTree &DT) {
   if (instChain.size() < 2) return false;
 
@@ -157,6 +266,7 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
   const SCEV *PtrSCEV = SE.getSCEV(Ptr);
   unsigned PtrBitWidth = DL.getPointerSizeInBits(0);
   APInt Size(PtrBitWidth, DL.getTypeStoreSize(Ptr->getType()->getPointerElementType()));
+  const SCEV *ElementSize = SE.getConstant(Size);
   const int lenChain = instChain.size();
   logs() << "PtrWidth : " << PtrBitWidth << "\nSize     : " << Size << "\n";
   logs() << "PtrSCEV  : " << *PtrSCEV << "\nIsLoad   : " << (isLoad ? "true" : "false") << "\n";
@@ -168,9 +278,12 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
     const SCEV *PtrSCEVA = SE.getSCEV(getLoadStorePointerOperand(instChain[i]));
     const SCEV *ConstDelta = SE.getConstant(Size * i);
     const SCEV *Delta = SE.getMinusSCEV(PtrSCEVA, PtrSCEV);
-    logs() << "PtrSCEVA : " << *PtrSCEVA << " ( Delta : " << *Delta << ")\n";
-    if (Delta != ConstDelta) return isChanged;
+    logs() << "PtrSCEVA : " << *PtrSCEVA << "\n"; // " ( Delta : " << *Delta << ")\n";
   }
+
+  createSchemes(instChain, SE);
+
+  if (true) return false;
 
   logs() << "[Chain is CONSECUTIVE]\n";
 
@@ -271,13 +384,13 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
   return isChanged;
 }
 
-bool LoopVectorizePass::vectorizeMap(LoopVectorizePass::InstChainMap &instChainMap, ScalarEvolution &SE, const DataLayout &DL,  DominatorTree &DT) {
+bool LoopVectorizePass::vectorizeMap(LoopVectorizePass::InstChainMap &instChainMap, Loop *L, ScalarEvolution &SE, const DataLayout &DL,  DominatorTree &DT) {
   bool isChanged = false;
   for (std::pair<ChainID, InstChain> &chainItem : instChainMap) {
     logs() << "[Source] " << *chainItem.first << "\n";
     for (unsigned idx = 0; idx < chainItem.second.size(); ++idx)
       logs() << ((idx < chainItem.second.size() - 1) ? "|- " : "`- ") << *chainItem.second[idx] << "\n";
-    isChanged |= vectorizeInstructions(chainItem.second, SE, DL, DT);
+    isChanged |= vectorizeInstructions(chainItem.second, L, SE, DL, DT);
   }
   return isChanged;
 }
@@ -289,8 +402,8 @@ bool LoopVectorizePass::vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE, Ta
   for (BasicBlock *BB : L->getBlocks()) {
     InstChainMap loadChainMap, storeChainMap;
     std::tie(loadChainMap, storeChainMap) = collectInstructions(BB, TTI);
-    isChanged |= vectorizeMap(loadChainMap, SE, DL, DT);
-    isChanged |= vectorizeMap(storeChainMap, SE, DL, DT);
+    isChanged |= vectorizeMap(loadChainMap, L, SE, DL, DT);
+    isChanged |= vectorizeMap(storeChainMap, L, SE, DL, DT);
   }
 
   return isChanged;
