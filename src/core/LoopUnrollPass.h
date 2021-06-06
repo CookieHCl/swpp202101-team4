@@ -21,9 +21,10 @@
 
 #include "LoopSimplifyUtil.h"
 
+#include <vector>
+
 using namespace llvm;
 using namespace std;
-
 
 class LoopUnrollPass : public llvm::PassInfoMixin<LoopUnrollPass> {
 private:
@@ -33,6 +34,5 @@ public:
   LoopUnrollPass(bool isVerbose = false) : isVerbose(isVerbose) {};
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
-
 
 #endif
