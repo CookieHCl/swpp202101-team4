@@ -4,6 +4,7 @@
 // Existing passes
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
+#include "llvm/Transforms/Scalar/SCCP.h"
 
 // IR passes
 #include "ArithmeticPass.h"
