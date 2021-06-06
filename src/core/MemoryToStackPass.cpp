@@ -97,8 +97,8 @@ Function* MemoryToStackPass::createNewFree(Module &M, Function* OrigFree,
 }
 
 // Return sizeof(T) in bytes.
-// Copied from Backend.cpp
-static unsigned getAccessSize(Type *T) {
+// Code from Backend.cpp
+static uint64_t getAccessSize(Type *T) {
   if (isa<PointerType>(T))
     return 8;
   else if (isa<IntegerType>(T)) {
@@ -106,24 +106,31 @@ static unsigned getAccessSize(Type *T) {
   } else if (isa<ArrayType>(T)) {
     return getAccessSize(T->getArrayElementType()) * T->getArrayNumElements();
   }
-  assert(false && "Unsupported access size type!");
+  llvm_unreachable("Unsupported access size type!");
 }
 
 // stack can conflict; replace alloca with new malloc so nobody use stack
 void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc,
     IntegerType* I64Ty) {
   for (Function &F : M) {
-    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-      if (auto* Alloca = dyn_cast<AllocaInst>(&*I)) {
-        unsigned ptrSize = getAccessSize(Alloca->getAllocatedType());
+    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E;) {
+      // increase iterator first to avoid invalidation
+      if (auto* Alloca = dyn_cast<AllocaInst>(&*(I++))) {
+        uint64_t ptrSize = getAccessSize(Alloca->getAllocatedType());
+        // malloc size should be a multiple of 8
+        // we don't do this in getAccessSize because array size will become huge
+        ptrSize = (ptrSize + 7) / 8 * 8;
+
         logs() << "Alloca type: " << *(Alloca->getType()) << '\n';
         logs() << "Alloca size: " << ptrSize << '\n';
+
         auto* CallMalloc = CallInst::Create(NewMalloc->getFunctionType(),
             NewMalloc, ConstantInt::get(I64Ty, ptrSize), Twine(), Alloca);
         auto* CastMalloc = new BitCastInst(CallMalloc, Alloca->getType());
 
-        logs() << "Replace with " << *CallMalloc << '\n' << *CastMalloc << '\n';
         ReplaceInstWithInst(Alloca, CastMalloc);
+        // log after replace to print properly assigned instruction
+        logs() << "Replace with " << *CallMalloc << '\n' << *CastMalloc << '\n';
       }
     }
   }
@@ -138,11 +145,11 @@ void MemoryToStackPass::replaceFunction(Module &M, Function* OrigFun,
     }
 
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-        if (auto* CB = dyn_cast<CallBase>(&*I)) {
-          if (CB->getCalledFunction() == OrigFun) {
-            CB->setCalledFunction(NewFun);
-          }
+      if (auto* CB = dyn_cast<CallBase>(&*I)) {
+        if (CB->getCalledFunction() == OrigFun) {
+          CB->setCalledFunction(NewFun);
         }
+      }
     }
   }
 }
@@ -173,7 +180,7 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   Function* NewFree = createNewFree(M, OrigFree, I64Ty);
 
   // replace original functions
-  replaceAlloca(M, NewMalloc);
+  replaceAlloca(M, NewMalloc, I64Ty);
   replaceFunction(M, OrigMalloc, NewMalloc);
   replaceFunction(M, OrigFree, NewFree);
 
