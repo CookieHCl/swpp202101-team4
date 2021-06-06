@@ -7,6 +7,8 @@ target triple = "x86_64-unknown-linux-gnu"
 define dso_local i32 @main() #0 {
 ; CHECK: start main 0:
 ; CHECK-NOT: sp
+; CHECK: call ____malloc
+; CHECK-NOT: sp
 ; CHECK: end main
 entry:
   %count = alloca [10 x i64], align 16
