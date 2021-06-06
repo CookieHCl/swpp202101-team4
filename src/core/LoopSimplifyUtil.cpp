@@ -37,16 +37,13 @@ void makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM) {
   LoopAnalysisManager &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
   
   bool isGlobalChanged = false;
+  
   for (Loop *L : LI.getLoopsInPreorder()) {
-    bool isChanged = simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
-    if (isChanged) LAM.invalidate(*L, PreservedAnalyses::none());
-    isGlobalChanged |= isChanged;
-    isChanged = formLCSSARecursively(*L, DT, &LI, nullptr);
-    if (isChanged) LAM.invalidate(*L, PreservedAnalyses::none());
-    isGlobalChanged |= isChanged;
+    isGlobalChanged |= simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
+    isGlobalChanged |= formLCSSARecursively(*L, DT, &LI, nullptr);
   }
 
-  if (isGlobalChanged) FAM.invalidate(F, PreservedAnalyses::none());
+  if (isGlobalChanged) FAM.invalidate(F, getLoopPassPreservedAnalyses());
 }
 
 void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM) {

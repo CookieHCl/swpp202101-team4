@@ -14,8 +14,9 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
   AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
   TargetTransformInfo &TTI = FAM.getResult<TargetIRAnalysis>(F);
-  OptimizationRemarkEmitter ORE(&F);
-  bool PreserveLCSSA = false;
+
+  // IMPORTANT! To make Remainder loop, PreserveLCSSA. If not, it may raise PHINode related assertion.
+  bool PreserveLCSSA = true;
 
   UnrollLoopOptions ULO;
   // ULO.count means loop copied count
@@ -42,7 +43,9 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
   bool isChanged = false;
   for (Loop *L : LI.getLoopsInPreorder())
     if (L->isInnermost()) {
+      OptimizationRemarkEmitter ORE(&F);
       logs() << "[LoopUnrollPass] try unroll " << *L <<"\n";
+      logs() << F << "\n";
       Loop *Remainder = nullptr;
       LoopUnrollResult result = UnrollLoop(L, ULO, &LI, &SE, &DT, &AC, &TTI, &ORE, PreserveLCSSA, &Remainder);
       logs() << "Result\n";
