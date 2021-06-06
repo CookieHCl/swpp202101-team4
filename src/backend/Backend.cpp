@@ -132,7 +132,17 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
     *os << "end " << symbolMap.get(&F)->getName() << "\n\n";
   }
 
-  // print malloc
+  /*
+  // 102392 stores left size and is initialized with 102392
+  ____malloc(size) {
+    if (size > *102392) { // CondBB
+      return malloc(size); // MallocBB
+    }
+    else {
+      return (*102392 -= size); // StackBB
+    }
+  }
+  */
   *os << "start ____malloc 1:\n"
       ".CondBB:\n"
       "  r2 = load 8 102392 0 \n"
@@ -147,7 +157,16 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
       "  ret r1 \n"
       "end ____malloc\n";
 
-  // print free
+  /*
+  ____free(p) {
+    if (p > 123456) { // CondBB
+      free(p); // FreeBB
+    }
+    else {
+      return; // VoidBB
+    }
+  }
+  */
   *os << "start ____free 1:\n"
       ".CondBB:\n"
       "  r1 = icmp ugt arg1 123456 64 \n"

@@ -22,10 +22,6 @@ private:
     return isVerbose ? outs() : nulls();
   }
 
-  Function* createNewMalloc(Module &M, Function* OrigMalloc,
-      Value* StackPointer, IntegerType* I64Ty);
-  Function* createNewFree(Module &M, Function* OrigFree, IntegerType* I64Ty);
-
   void replaceAlloca(Module &M, Function* NewMalloc, IntegerType* I64Ty);
   void replaceFunction(Module &M, Function* OrigFun, Function* NewFun);
 

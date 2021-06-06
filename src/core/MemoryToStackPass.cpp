@@ -4,50 +4,11 @@ const char* MemoryToStackPass::STACK_POINTER_NAME = "____sp";
 const char* MemoryToStackPass::NEW_MALLOC_NAME = "____malloc";
 const char* MemoryToStackPass::NEW_FREE_NAME = "____free";
 
-/*
-// ____malloc is created in Backend.cpp
-// Note that in llvm, global variable is pointer
-____malloc(size) {
-  if (size > *StackPointer) { // CondBB
-    return malloc(size); // MallocBB
-  }
-  else {
-    return (*StackPointer -= size); // StackBB
-  }
-}
-*/
-Function* MemoryToStackPass::createNewMalloc(Module &M, Function* OrigMalloc,
-    Value* StackPointer, IntegerType* I64Ty) {
-  return Function::Create(OrigMalloc->getFunctionType(),
-      Function::ExternalLinkage, NEW_MALLOC_NAME, M);
-}
+#define NEW_FUNC(OldFunc, NewName, M) (OldFunc ? \
+    Function::Create(OldFunc->getFunctionType(), Function::ExternalLinkage, \
+    NewName, M) : nullptr)
 
-/*
-// ____free is created in Backend.cpp
-____free(p) {
-  if (p > 123456) { // CondBB
-    free(p); // FreeBB
-  }
-  else {
-    return; // VoidBB
-  }
-}
-*/
-Function* MemoryToStackPass::createNewFree(Module &M, Function* OrigFree,
-    IntegerType* I64Ty) {
-  if (!OrigFree) {
-    return nullptr;
-  }
-
-  FunctionType* FreeType = OrigFree->getFunctionType();
-  Function* NewFree = Function::Create(FreeType, Function::ExternalLinkage,
-      NEW_FREE_NAME, M);
-  NewFree->setAttributes(OrigFree->getAttributes());
-  return NewFree;
-}
-
-// Return sizeof(T) in bytes.
-// Code from Backend.cpp
+// Code from Backend.cpp. Return sizeof(T) in bytes.
 static uint64_t getAccessSize(Type *T) {
   if (isa<PointerType>(T))
     return 8;
@@ -120,14 +81,10 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   // It's normal to not have free; don't check it
   Function* OrigFree = M.getFunction("free");
 
-  // global variable to count stack's size; sp = left size
-  auto* StackPointer = new GlobalVariable(M, I64Ty, false,
-      GlobalVariable::PrivateLinkage, ConstantInt::get(I64Ty, STACK_SIZE),
-      STACK_POINTER_NAME);
-
   // create new malloc & free
-  Function* NewMalloc = createNewMalloc(M, OrigMalloc, StackPointer, I64Ty);
-  Function* NewFree = createNewFree(M, OrigFree, I64Ty);
+  // actual function definition is in Backend.cpp
+  Function* NewMalloc = NEW_FUNC(OrigMalloc, NEW_MALLOC_NAME, M);
+  Function* NewFree = NEW_FUNC(OrigFree, NEW_FREE_NAME, M);
 
   // replace original functions
   replaceAlloca(M, NewMalloc, I64Ty);
