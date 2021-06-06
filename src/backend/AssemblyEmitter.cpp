@@ -47,8 +47,8 @@ string AssemblyEmitter::stringBandWidth(Value* v) {
     return to_string(getBitWidth(v->getType()));
 }
 
-AssemblyEmitter::AssemblyEmitter(raw_ostream *fout, TargetMachine& TM, SymbolMap& SM, map<Function*, unsigned>& spOffset) :
-            fout(fout), TM(&TM), SM(&SM), spOffset(spOffset) {}
+AssemblyEmitter::AssemblyEmitter(raw_ostream *fout, TargetMachine& TM, SymbolMap& SM, map<Function*, unsigned>& spOffset, bool hasNewMalloc) :
+            fout(fout), TM(&TM), SM(&SM), spOffset(spOffset), hasNewMalloc(hasNewMalloc) {}
 
 void AssemblyEmitter::visitFunction(Function& F) {
     //print the starting code.
@@ -76,7 +76,8 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
         }
         if(spOffset[BB.getParent()] != 0) {
             *fout << "  ; Init stack pointer\n";
-            *fout << emitInst({"sp = call ____malloc",to_string(spOffset[BB.getParent()])});
+            *fout << (hasNewMalloc ? emitInst({"sp = call ____malloc",to_string(spOffset[BB.getParent()])})
+                                   : emitInst({"sp = sub sp",to_string(spOffset[BB.getParent()]),"64"}));
         }
     }
 }
@@ -230,11 +231,6 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
         assert(args.size()==1 && "argument of free() should be 1");
         *fout << emitInst({"free", name(I.getArgOperand(0))});
     }
-    /*else if(Fname == "____stackalloc") {
-        assert(args.size()==1 && "argument of ____stackalloc() should be 1");
-        *fout << emitInst({"sp = sub sp", name(I.getArgOperand(0)), "64"})
-            << emitInst({name(&I), "= mul sp 1 64"});
-    }*/
     else if(UnfoldVectorInstPass::VLOADS.find(Fname) != UnfoldVectorInstPass::VLOADS.end()) {
         vector<string> asmb;
         int n = atoi(Fname.substr(Fname.size() - 1, 1).c_str());

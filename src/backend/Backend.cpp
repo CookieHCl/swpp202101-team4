@@ -124,7 +124,8 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
     exit(1);
   }
 
-  AssemblyEmitter Emitter(os, TM, symbolMap, spOffsetMap);
+  AssemblyEmitter Emitter(os, TM, symbolMap, spOffsetMap,
+    M.getFunction("____malloc") != nullptr);
   for(Function& F : M){
     if(F.isDeclaration()) continue;
     Emitter.visit(F);
