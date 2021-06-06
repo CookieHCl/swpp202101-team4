@@ -4,9 +4,9 @@ const char* MemoryToStackPass::STACK_POINTER_NAME = "____sp";
 const char* MemoryToStackPass::NEW_MALLOC_NAME = "____malloc";
 const char* MemoryToStackPass::NEW_FREE_NAME = "____free";
 
-#define NEW_FUNC(OldFunc, NewName, M) (OldFunc ? \
-    Function::Create(OldFunc->getFunctionType(), Function::ExternalLinkage, \
-    NewName, M) : nullptr)
+// make new function declaration with same type
+#define NEW_FUNC(OldFunc, NewName, M) (!OldFunc ? nullptr : Function::Create( \
+    OldFunc->getFunctionType(), Function::ExternalLinkage, NewName, M))
 
 // Code from Backend.cpp. Return sizeof(T) in bytes.
 static uint64_t getAccessSize(Type *T) {
@@ -21,8 +21,7 @@ static uint64_t getAccessSize(Type *T) {
 }
 
 // stack can conflict; replace alloca with new malloc so nobody use stack
-void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc,
-    IntegerType* I64Ty) {
+void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc) {
   for (Function &F : M) {
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E;) {
       // increase iterator first to avoid invalidation
@@ -35,8 +34,9 @@ void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc,
         logs() << "Alloca type: " << *(Alloca->getType()) << '\n';
         logs() << "Alloca size: " << ptrSize << '\n';
 
+        IntegerType* Int64Type = Type::getInt64Ty(M.getContext());
         auto* CallMalloc = CallInst::Create(NewMalloc->getFunctionType(),
-            NewMalloc, ConstantInt::get(I64Ty, ptrSize), Twine(), Alloca);
+            NewMalloc, ConstantInt::get(Int64Type, ptrSize), Twine(), Alloca);
         auto* CastMalloc = new BitCastInst(CallMalloc, Alloca->getType());
 
         ReplaceInstWithInst(Alloca, CastMalloc);
@@ -51,10 +51,6 @@ void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc,
 void MemoryToStackPass::replaceFunction(Module &M, Function* OrigFun,
     Function* NewFun) {
   for (Function &F : M) {
-    if (&F == NewFun) {
-      continue;
-    }
-
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
       if (auto* CB = dyn_cast<CallBase>(&*I)) {
         if (CB->getCalledFunction() == OrigFun) {
@@ -67,8 +63,6 @@ void MemoryToStackPass::replaceFunction(Module &M, Function* OrigFun,
 
 PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) {
   logs() << "---------- Start MemoryToStackPass ----------\n";
-
-  IntegerType* I64Ty = Type::getInt64Ty(M.getContext());
 
   Function* OrigMalloc = M.getFunction("malloc");
   // If we don't have malloc, we don't need to change to stack at all
@@ -87,7 +81,7 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   Function* NewFree = NEW_FUNC(OrigFree, NEW_FREE_NAME, M);
 
   // replace original functions
-  replaceAlloca(M, NewMalloc, I64Ty);
+  replaceAlloca(M, NewMalloc);
   replaceFunction(M, OrigMalloc, NewMalloc);
   replaceFunction(M, OrigFree, NewFree);
 
