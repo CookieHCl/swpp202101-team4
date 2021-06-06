@@ -16,6 +16,7 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 #include <vector>
+#include <queue>
 
 using namespace llvm;
 using namespace std;
@@ -27,11 +28,18 @@ public:
   public:
     int sourceID;
     const SCEV *scev;
-    Value *v;
+    Instruction *memInst;
+    Value *ptr;
     int displ;
     void setSourceID(int sourceID) { this->sourceID = sourceID; }
     void setDispl(int displ) { this->displ = displ; }
-    ConsecutiveScheme(int sourceID, const SCEV *scev, Value *v, int displ) : sourceID(sourceID), scev(scev), v(v), displ(displ) {}
+    bool operator < (const ConsecutiveScheme &scheme) const {
+      return (sourceID < scheme.sourceID )? true : ((sourceID == scheme.sourceID) ? (displ < scheme.displ) : false);
+    }
+    friend raw_ostream& operator << (raw_ostream& os, const ConsecutiveScheme &scheme) {
+      return os << "[" << *scheme.scev << "](" << scheme.ptr->getName() << ") source " << scheme.sourceID << " displ " << scheme.displ;
+    }
+    ConsecutiveScheme(Instruction *inst, int sourceID, ScalarEvolution &SE);
   };
   using ChainID = const Value*;
   using InstChain = SmallVector<Instruction*, 8>;
@@ -49,6 +57,9 @@ private:
     EXTRACT = 1,
     STORE = 2
   };
+  bool isReferSameMemory(Instruction *inst, Instruction *pivot, ScalarEvolution &SE);
+  bool isLoadForwardable(Instruction *inst1, Instruction *inst2, DominatorTree &DT, ScalarEvolution &SE);
+  bool isStoreBackwardable(Instruction *inst1, Instruction *inst2, DominatorTree &DT, ScalarEvolution &SE);
   std::vector<ConsecutiveScheme> createSchemes(InstChain &instChain, ScalarEvolution &SE);
   ConProperty measureConsecutiveProperty(const SCEV *scev1, const SCEV *scev2, ScalarEvolution &SE);
   ChainID getChainID(const Value *Ptr);
