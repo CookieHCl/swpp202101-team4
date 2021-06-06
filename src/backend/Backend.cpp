@@ -521,7 +521,8 @@ map<Function*, unsigned> Backend::processAlloca(Module& M, SymbolMap& SM) {
       }
     }
 
-    spOffsetMap[&F] = acc;
+    // malloc size should be a multiple of 8
+    spOffsetMap[&F] = (acc + 7) / 8 * 8;
   }
 
   return spOffsetMap;

@@ -76,7 +76,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
         }
         if(spOffset[BB.getParent()] != 0) {
             *fout << "  ; Init stack pointer\n";
-            *fout << emitInst({"sp = sub sp",to_string(spOffset[BB.getParent()]),"64"});
+            *fout << emitInst({"sp = call ____malloc",to_string(spOffset[BB.getParent()])});
         }
     }
 }
