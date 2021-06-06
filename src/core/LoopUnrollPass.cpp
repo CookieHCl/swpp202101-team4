@@ -1,50 +1,51 @@
 #include "LoopUnrollPass.h"
 
 
-void LoopUnrollPass::rotateLoop(Function &F, FunctionAnalysisManager &FAM) {
-  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-  if (LI.empty()) return;
 
-  LoopAnalysisManager &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
+PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM) {
+  makeAllocaAsPHI(F, FAM);
+  rotateLoop(F, FAM);
+  makeSimplifyLCSSA(F, FAM);
+
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
-  MemorySSA &MSSA = FAM.getResult<MemorySSAAnalysis>(F).getMSSA();
-  MemorySSAUpdater MSSAU = MemorySSAUpdater(&MSSA);
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
+  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
   TargetTransformInfo &TTI = FAM.getResult<TargetIRAnalysis>(F);
-  SimplifyQuery SQ = getBestSimplifyQuery(FAM, F);
+  OptimizationRemarkEmitter ORE(&F);
+  bool PreserveLCSSA = false;
+
+  UnrollLoopOptions ULO;
+  ULO.Count = 8;
+  ULO.TripCount = 0;
+  ULO.TripMultiple = 1;
+
+  ULO.Force = false;
+  ULO.AllowRuntime = true;
+  ULO.AllowExpensiveTripCount = true;
+
+  ULO.PreserveCondBr = true;
+  ULO.PreserveOnlyFirst = false;
+  ULO.PeelCount = 0;
+  ULO.UnrollRemainder = false;
+  ULO.ForgetAllSCEV = true;
 
   bool isChanged = false;
   for (Loop *L : LI.getLoopsInPreorder())
-    if ((isChanged = LoopRotation(L, &LI, &TTI, &AC, &DT, &SE, &MSSAU, SQ, true, -1, true)))
-      LAM.invalidate(*L, getLoopPassPreservedAnalyses());
+    if (L->isInnermost()) {
+      Loop *Remainder = nullptr;
+      LoopUnrollResult result = UnrollLoop(L, ULO, &LI, &SE, &DT, &AC, &TTI, &ORE, PreserveLCSSA, &Remainder);
+      logs() << "Result : ";
+      switch(result) {
+        case LoopUnrollResult::Unmodified: logs() << "Unmodified\n";
+        case LoopUnrollResult::PartiallyUnrolled: logs() << "Partial\n";
+        case LoopUnrollResult::FullyUnrolled: logs() << "Full\n";
+      }
+      if (Remainder) {
+        logs() << "There is remainder \n";
+        logs() << *Remainder << "\n";
+      }
+    }
 
-  if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
-}
-
-void LoopUnrollPass::makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM) {
-  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-  if (LI.empty()) return;
-
-  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
-  MemorySSA &MSSA = FAM.getResult<MemorySSAAnalysis>(F).getMSSA();
-  MemorySSAUpdater MSSAU = MemorySSAUpdater(&MSSA);
-  ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
-  LoopAnalysisManager &LAM = FAM.getResult<LoopAnalysisManagerFunctionProxy>(F).getManager();
-  
-  bool isGlobalChanged = false;
-  for (Loop *L : LI.getLoopsInPreorder()) {
-    bool isChanged = false;
-    isChanged |= simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
-    isChanged |= formLCSSARecursively(*L, DT, &LI, nullptr);
-    isGlobalChanged |= isChanged;
-    if (isChanged) LAM.invalidate(*L, getLoopPassPreservedAnalyses());
-  }
-
-  if (isGlobalChanged) FAM.invalidate(F, PreservedAnalyses::none());
-}
-
-PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
-  
+  return PreservedAnalyses::all();
 }
