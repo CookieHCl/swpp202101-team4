@@ -26,8 +26,10 @@ Function* MemoryToStackPass::createNewMalloc(Module &M, Function* OrigMalloc,
   FunctionType* MallocType = OrigMalloc->getFunctionType();
   Function* NewMalloc = Function::Create(MallocType, Function::ExternalLinkage,
       NEW_MALLOC_NAME, M);
+  NewMalloc->setAttributes(OrigMalloc->getAttributes());
   Function* StackAlloc = Function::Create(MallocType, Function::ExternalLinkage,
       STACK_ALLOC_NAME, M);
+  StackAlloc->setAttributes(OrigMalloc->getAttributes());
 
   BasicBlock* CondBB = BasicBlock::Create(M.getContext(), Twine(), NewMalloc);
   BasicBlock* MallocBB = BasicBlock::Create(M.getContext(), Twine(), NewMalloc);
@@ -75,6 +77,7 @@ Function* MemoryToStackPass::createNewFree(Module &M, Function* OrigFree,
   FunctionType* FreeType = OrigFree->getFunctionType();
   Function* NewFree = Function::Create(FreeType, Function::ExternalLinkage,
       NEW_FREE_NAME, M);
+  NewFree->setAttributes(OrigFree->getAttributes());
 
   BasicBlock* CondBB = BasicBlock::Create(M.getContext(), Twine(), NewFree);
   BasicBlock* FreeBB = BasicBlock::Create(M.getContext(), Twine(), NewFree);
@@ -96,6 +99,24 @@ Function* MemoryToStackPass::createNewFree(Module &M, Function* OrigFree,
   ReturnInst::Create(M.getContext(), VoidBB);
 
   return NewFree;
+}
+
+// replace all calls calling OrigFun except those inside NewFun
+void MemoryToStackPass::replaceFunction(Module &M, Function* OrigFun,
+    Function* NewFun) {
+  for (Function &F : M) {
+    if (&F == NewFun) {
+      continue;
+    }
+
+    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
+        if (auto* CB = dyn_cast<CallBase>(&*I)) {
+          if (CB->getCalledFunction() == OrigFun) {
+            CB->setCalledFunction(NewFun);
+          }
+        }
+    }
+  }
 }
 
 PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) {
@@ -124,8 +145,8 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   Function* NewFree = createNewFree(M, OrigFree, I64Ty);
 
   // replace malloc & free
-  //replaceFunction(M, OrigMalloc, NewMalloc);
-  //replaceFunction(M, OrigFree, NewFree);
+  replaceFunction(M, OrigMalloc, NewMalloc);
+  replaceFunction(M, OrigFree, NewFree);
 
   logs() << "---------- End MemoryToStackPass ----------\n";
   return PreservedAnalyses::none();
