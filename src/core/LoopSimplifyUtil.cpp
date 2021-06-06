@@ -1,5 +1,18 @@
 #include "LoopSimplifyUtil.h"
 
+void insertPreheader(Function &F, FunctionAnalysisManager &FAM) {
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+  if (LI.empty()) return;
+
+  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  MemorySSA &MSSA = FAM.getResult<MemorySSAAnalysis>(F).getMSSA();
+  MemorySSAUpdater MSSAU = MemorySSAUpdater(&MSSA);
+
+  for (Loop *L : LI.getLoopsInPreorder())
+    InsertPreheaderForLoop(L, &DT, &LI, &MSSAU, true);
+
+  FAM.invalidate(F, PreservedAnalyses::none());
+}
 
 void rotateLoop(Function &F, FunctionAnalysisManager &FAM) {
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
@@ -39,8 +52,11 @@ void makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM) {
   bool isGlobalChanged = false;
   
   for (Loop *L : LI.getLoopsInPreorder()) {
-    isGlobalChanged |= simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
-    isGlobalChanged |= formLCSSARecursively(*L, DT, &LI, nullptr);
+    bool isChanged = false;
+    isChanged |= simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
+    isChanged |= formLCSSARecursively(*L, DT, &LI, nullptr);
+    if (isChanged) LAM.invalidate(*L, PreservedAnalyses::none());
+    isGlobalChanged |= isChanged;
   }
 
   if (isGlobalChanged) FAM.invalidate(F, getLoopPassPreservedAnalyses());

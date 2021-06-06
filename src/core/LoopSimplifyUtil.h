@@ -21,3 +21,4 @@ using namespace llvm;
 void rotateLoop(Function &F, FunctionAnalysisManager &FAM);
 void makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM);
 void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
+void insertPreheader(Function &F, FunctionAnalysisManager &FAM);

@@ -14,6 +14,7 @@
 
 PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM) {
   makeAllocaAsPHI(F, FAM);
+  insertPreheader(F, FAM);
   rotateLoop(F, FAM);
 
   // Loop Unroll should be LCSSA form.
