@@ -17,6 +17,7 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/DependenceAnalysis.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
 
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
@@ -33,7 +34,12 @@ private:
   // stream for logging; only prints if verbose
   raw_ostream& logs() const { return isVerbose ? outs() : nulls(); }
 
-  SmallVector<PHINode *, 16> findPHINode(Loop *L, BasicBlock *incomming);
+  PHINode *getCanonicalVariable(Loop *L);
+  bool isValidtoAdded(const SCEV *target, Value *ptrAddr, Loop *OuterLoop, ScalarEvolution &SE);
+
+  bool isConstantRange(Loop *L, const SCEV *target, Loop *Outer, ScalarEvolution &SE);
+  bool noAdditionalOuterBody(Loop *InnerLoop, Loop *OuterLoop);
+  bool isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE);
 
   void rmSumRegister(Function &F, FunctionAnalysisManager &FAM);
   void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);

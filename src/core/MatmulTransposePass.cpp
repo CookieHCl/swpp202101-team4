@@ -61,7 +61,7 @@ void MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
 
           // v1 = add %sum.0 %mul.11
           BinaryOperator *addInst = dyn_cast<BinaryOperator>(v1);
-          if(!(addInst && addInst->getOpcode() == 13 && addInst->getOperand(0) == v)) continue;
+          if(!(addInst && addInst->getOpcode() == Instruction::Add && addInst->getOperand(0) == v)) continue;
 
           // c[i * dim + j] = sum in backedge
           StoreInst *storeInst = nullptr;
@@ -120,9 +120,151 @@ void MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
   }
 }
 
-void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &FAM) {
-  if(F.getName() != "matmul") return;
+PHINode *MatmulTransposePass::getCanonicalVariable(Loop *L) {
+  BasicBlock *H = L->getHeader();
 
+  BasicBlock *Incoming = nullptr, *Backedge = nullptr;
+  if (!L->getIncomingAndBackEdge(Incoming, Backedge))
+    return nullptr;
+
+  // Loop over all of the PHI nodes, looking for a canonical indvar.
+  for (BasicBlock::iterator I = H->begin(); isa<PHINode>(I); ++I) {
+    PHINode *PN = cast<PHINode>(I);
+    if (ConstantInt *CI =
+            dyn_cast<ConstantInt>(PN->getIncomingValueForBlock(Incoming)))
+      if (Instruction *Inc =
+              dyn_cast<Instruction>(PN->getIncomingValueForBlock(Backedge)))
+        if (Inc->getOpcode() == Instruction::Add && Inc->getOperand(0) == PN)
+          if (ConstantInt *CI = dyn_cast<ConstantInt>(Inc->getOperand(1)))
+            return PN;
+  }
+  return nullptr;
+}
+
+bool MatmulTransposePass::isConstantRange(Loop *L, const SCEV *target, Loop *Outer, ScalarEvolution &SE) {
+  SCEVTypes scevType = target->getSCEVType();
+  logs() << "isConstantRange : " << *target <<"\n";
+  switch (scevType) {
+    case SCEVTypes::scMulExpr:
+    case SCEVTypes::scUDivExpr:
+    case SCEVTypes::scUMaxExpr:
+    case SCEVTypes::scSMaxExpr:
+    case SCEVTypes::scUMinExpr:
+    case SCEVTypes::scSMinExpr:
+    case SCEVTypes::scAddExpr: {
+      const SCEVNAryExpr *narySCEV = dyn_cast<SCEVNAryExpr>(target);
+      bool rev = true;
+      for (int i = 0; i < narySCEV->getNumOperands(); ++i)
+        rev &= this->isConstantRange(L, narySCEV->getOperand(i), Outer, SE);
+      return rev;
+    }
+    case SCEVTypes::scAddRecExpr: {
+      const SCEVAddRecExpr *addRecSCEV = dyn_cast<SCEVAddRecExpr>(target);
+      if(addRecSCEV->getLoop() != L) return false;
+      bool rev = true;
+      for (int i = 0; i < addRecSCEV->getNumOperands(); ++i)
+        rev &= this->isConstantRange(L, addRecSCEV->getOperand(i), Outer, SE);
+      return rev;
+    }
+    case SCEVTypes::scConstant: return true;
+    case SCEVTypes::scUnknown:{
+      const SCEVUnknown *valSCEV = dyn_cast<SCEVUnknown>(target);
+      return Outer->isLoopInvariant(valSCEV->getValue());
+    }
+    case SCEVTypes::scTruncate:
+    case SCEVTypes::scZeroExtend:
+    case SCEVTypes::scSignExtend: {
+      const SCEVCastExpr *castSCEV = dyn_cast<SCEVCastExpr>(target);
+      return this->isConstantRange(L, castSCEV->getOperand(), Outer, SE);
+    }
+    default: return false;
+  }
+}
+
+bool MatmulTransposePass::noAdditionalOuterBody(Loop *InnerLoop, Loop *OuterLoop) {
+  for (BasicBlock *BB : OuterLoop->getBlocks()) {
+    if(InnerLoop->contains(BB)) continue;
+    for (Instruction &I : *BB) {
+      if(!InnerLoop->isLoopInvariant(&I)) return false;
+      if(dyn_cast<StoreInst>(&I) || dyn_cast<CallInst>(&I)) return false;
+    }
+  }
+  return true;
+}
+
+bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loop *OuterLoop, ScalarEvolution &SE) {
+  SCEVTypes scevType = target->getSCEVType();
+  switch (scevType) {
+    case SCEVTypes::scAddRecExpr:
+    case SCEVTypes::scMulExpr:
+    case SCEVTypes::scUDivExpr:
+    case SCEVTypes::scUMaxExpr:
+    case SCEVTypes::scSMaxExpr:
+    case SCEVTypes::scUMinExpr:
+    case SCEVTypes::scSMinExpr:
+    case SCEVTypes::scAddExpr: {
+      const SCEVNAryExpr *narySCEV = dyn_cast<SCEVNAryExpr>(target);
+      bool rev = true;
+      for (int i = 0; i < narySCEV->getNumOperands(); ++i)
+        rev &= this->isValidtoAdded(narySCEV->getOperand(i), ptrAddr, OuterLoop, SE);
+      return rev;
+    }
+    case SCEVTypes::scConstant: return true;
+    case SCEVTypes::scUnknown:{
+      const SCEVUnknown *valSCEV = dyn_cast<SCEVUnknown>(target);
+      Value *Inst = valSCEV->getValue();
+      if(OuterLoop->isLoopInvariant(Inst)) return true;
+      if(LoadInst *load = dyn_cast<LoadInst>(Inst)) {
+        if(!load->isSimple()) return false;
+        GetElementPtrInst *ptrInst = dyn_cast<GetElementPtrInst>(load->getPointerOperand());
+        if(!ptrInst) return false;
+        if(ptrInst->getOperand(0) == ptrAddr) return false;
+        return this->isValidtoAdded(SE.getSCEV(ptrInst->getOperand(1)), ptrAddr, OuterLoop, SE);
+      }
+      return false;
+    }
+    case SCEVTypes::scTruncate:
+    case SCEVTypes::scZeroExtend:
+    case SCEVTypes::scSignExtend: {
+      const SCEVCastExpr *castSCEV = dyn_cast<SCEVCastExpr>(target);
+      return this->isValidtoAdded(castSCEV->getOperand(), ptrAddr, OuterLoop, SE);
+    }
+    default: return false;
+  }
+}
+
+bool MatmulTransposePass::isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE) {
+  for (BasicBlock *BB : InnerLoop->getBlocks()) {
+    for (Instruction &I : *BB) {
+      if(dyn_cast<CallInst>(&I)) return false;
+
+      StoreInst *store;
+      if(!(store = dyn_cast<StoreInst>(&I))) continue;
+      if(!store->isSimple()) return false;
+
+      // store value to ptr -> value should be (load ptr) + (something)
+      // that means *ptr += something; in C
+      BinaryOperator* addInst = dyn_cast<BinaryOperator>(store->getValueOperand());
+      if(!addInst || addInst->getOpcode() != Instruction::Add) return false;                    // should be addInst
+
+      LoadInst *load = dyn_cast<LoadInst>(addInst->getOperand(0));
+      if(!load || !load->isSimple()) return false;
+      if(store->getPointerOperand() != load->getPointerOperand()) return false;   // should be same ptr
+
+      // now check (something)
+      GetElementPtrInst *ptrInst = dyn_cast<GetElementPtrInst>(store->getPointerOperand());
+      if(!ptrInst) return false;
+      
+      Value *v = addInst->getOperand(1);
+      const SCEV *value = SE.getSCEV(v);
+      if(!isValidtoAdded(value, ptrInst->getOperand(0), OuterLoop, SE)) return false;
+      logs() << "  SCEV += " << *value << "\n";
+    }
+  }
+  return true;
+}
+
+void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &FAM) {
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
@@ -179,6 +321,20 @@ void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
       }
       if(!flag) continue;
 
+      PHINode *InnerLoopCanVar = getCanonicalVariable(L);
+      PHINode *OuterLoopCanVar = getCanonicalVariable(Outer);
+      if(!InnerLoopCanVar || !OuterLoopCanVar) continue;
+
+      // CHECK 1. constant range
+      if(!(isConstantRange(L, SE.getSCEV(InnerLoopCanVar), Outer, SE) &&
+           isConstantRange(Outer, SE.getSCEV(OuterLoopCanVar), Outer, SE))) continue;
+      
+      // CHECK 2. OuterLoop body = InnerLoop body
+      if(!noAdditionalOuterBody(L, Outer)) continue;
+
+      // CHECK 3. check body load store relation
+      if(!isThereOnlySigmaStore(L, Outer, SE)) continue;
+
       InnerToLatchBI->setSuccessor(0, OuterLoopLatch);
       OuterToLatchBI->setSuccessor(0, InnerLoopLatch);
       
@@ -187,16 +343,13 @@ void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
       BasicBlock *OuterLoopEnd = OuterLoopHeaderBI->getSuccessor(1);
       BasicBlock *InnerLoopEnd = InnerLoopHeaderBI->getSuccessor(1);
 
-      PHINode *InnerLoopcond = L->getCanonicalInductionVariable();
-      PHINode *OuterLoopcond = Outer->getCanonicalInductionVariable();
-
       OuterLoopHeaderBI->setSuccessor(0, InnerLoopBody);
       OuterLoopHeaderBI->setSuccessor(1, InnerLoopEnd);
       InnerLoopHeaderBI->setSuccessor(0, OuterLoopBody);
       InnerLoopHeaderBI->setSuccessor(1, OuterLoopEnd);
 
-      OuterLoopcond->setIncomingBlock(0, InnerIncomming);
-      InnerLoopcond->setIncomingBlock(0, OuterIncomming);
+      OuterLoopCanVar->setIncomingBlock(0, InnerIncomming);
+      InnerLoopCanVar->setIncomingBlock(0, OuterIncomming);
 
       OuterIncommingBI->setSuccessor(0, InnerLoopHeader);
       InnerIncommingBI->setSuccessor(0, OuterLoopHeader);
