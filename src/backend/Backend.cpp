@@ -132,17 +132,32 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
     *os << "end " << symbolMap.get(&F)->getName() << "\n\n";
   }
 
+  // print malloc
+  *os << "start ____malloc 1:\n"
+      ".CondBB:\n"
+      "  r2 = load 8 102392 0 \n"
+      "  r1 = icmp ugt arg1 r2 64 \n"
+      "  br r1 .MallocBB .StackBB \n"
+      ".MallocBB:\n"
+      "  r1 = malloc arg1 \n"
+      "  ret r1 \n"
+      ".StackBB:\n"
+      "  r1 = sub r2 arg1 64 \n"
+      "  store 8 r1 102392 0 \n"
+      "  ret r1 \n"
+      "end ____malloc\n";
+
   // print free
   *os << "start ____free 1:\n"
-         ".CondBB:\n"
-         "  r1 = icmp ugt arg1 123456 64 \n"
-         "  br r1 .FreeBB .VoidBB \n"
-         ".FreeBB:\n"
-         "  free arg1 \n"
-         "  ret \n"
-         ".VoidBB:\n"
-         "  ret \n"
-         "end ____free\n";
+      ".CondBB:\n"
+      "  r1 = icmp ugt arg1 123456 64 \n"
+      "  br r1 .FreeBB .VoidBB \n"
+      ".FreeBB:\n"
+      "  free arg1 \n"
+      "  ret \n"
+      ".VoidBB:\n"
+      "  ret \n"
+      "end ____free\n";
 
   if (os != &outs()) delete os;
   

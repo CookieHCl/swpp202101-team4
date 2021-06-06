@@ -5,6 +5,7 @@ const char* MemoryToStackPass::NEW_MALLOC_NAME = "____malloc";
 const char* MemoryToStackPass::NEW_FREE_NAME = "____free";
 
 /*
+// ____malloc is created in Backend.cpp
 // Note that in llvm, global variable is pointer
 ____malloc(size) {
   if (size > *StackPointer) { // CondBB
@@ -17,39 +18,8 @@ ____malloc(size) {
 */
 Function* MemoryToStackPass::createNewMalloc(Module &M, Function* OrigMalloc,
     Value* StackPointer, IntegerType* I64Ty) {
-  if (!OrigMalloc) {
-    llvm_unreachable("There must be malloc to use stack");
-  }
-
-  FunctionType* MallocType = OrigMalloc->getFunctionType();
-  Function* NewMalloc = Function::Create(MallocType, Function::ExternalLinkage,
-      NEW_MALLOC_NAME, M);
-  NewMalloc->setAttributes(OrigMalloc->getAttributes());
-
-  BasicBlock* CondBB = BasicBlock::Create(M.getContext(), Twine(), NewMalloc);
-  BasicBlock* MallocBB = BasicBlock::Create(M.getContext(), Twine(), NewMalloc);
-  BasicBlock* StackBB = BasicBlock::Create(M.getContext(), Twine(), NewMalloc);
-
-  // Instructions for CondBB
-  auto* RemainingSize = new LoadInst(I64Ty, StackPointer, Twine(), CondBB);
-  auto* HasOverflow = new ICmpInst(*CondBB, ICmpInst::ICMP_UGT,
-      NewMalloc->getArg(0), RemainingSize);
-  BranchInst::Create(MallocBB, StackBB, HasOverflow, CondBB);
-
-  // Instructions for MallocBB
-  auto* CallMalloc = CallInst::Create(MallocType, OrigMalloc,
-      NewMalloc->getArg(0), Twine(), MallocBB);
-  ReturnInst::Create(M.getContext(), CallMalloc, MallocBB);
-
-  // Instructions for StackBB
-  auto* NewSize = BinaryOperator::Create(BinaryOperator::Sub,
-      RemainingSize, NewMalloc->getArg(0), Twine(), StackBB);
-  new StoreInst(NewSize, StackPointer, StackBB);
-  auto* NewPointer = new IntToPtrInst(NewSize, MallocType->getReturnType(),
-      Twine(), StackBB);
-  ReturnInst::Create(M.getContext(), NewPointer, StackBB);
-
-  return NewMalloc;
+  return Function::Create(OrigMalloc->getFunctionType(),
+      Function::ExternalLinkage, NEW_MALLOC_NAME, M);
 }
 
 /*

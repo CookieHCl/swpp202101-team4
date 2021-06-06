@@ -60,6 +60,9 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
 
     //If entry block, modify SP.
     if(&(BB.getParent()->getEntryBlock()) == &BB) {
+        if (hasNewMalloc) {
+            *fout << "  store 8 102392 102392 0\n";
+        }
         //if main, import GV within.
         //this code should happen only if GV array was in the initial program.
         //GV values are all lowered into alloca + calls
