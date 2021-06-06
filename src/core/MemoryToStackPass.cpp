@@ -53,7 +53,7 @@ Function* MemoryToStackPass::createNewMalloc(Module &M, Function* OrigMalloc,
 }
 
 /*
-// Note that pointer is in heap if pointer >= 204800
+// ____free is created in Backend.cpp
 ____free(p) {
   if (p > 123456) { // CondBB
     free(p); // FreeBB
@@ -73,26 +73,6 @@ Function* MemoryToStackPass::createNewFree(Module &M, Function* OrigFree,
   Function* NewFree = Function::Create(FreeType, Function::ExternalLinkage,
       NEW_FREE_NAME, M);
   NewFree->setAttributes(OrigFree->getAttributes());
-
-  BasicBlock* CondBB = BasicBlock::Create(M.getContext(), Twine(), NewFree);
-  BasicBlock* FreeBB = BasicBlock::Create(M.getContext(), Twine(), NewFree);
-  BasicBlock* VoidBB = BasicBlock::Create(M.getContext(), Twine(), NewFree);
-
-  // Instructions for CondBB
-  auto* ConstantPtr = ConstantExpr::getIntToPtr(ConstantInt::get(I64Ty, 123456),
-      NewFree->getArg(0)->getType());
-  auto* IsHeap = new ICmpInst(*CondBB, ICmpInst::ICMP_UGT,
-      NewFree->getArg(0), ConstantPtr);
-  BranchInst::Create(FreeBB, VoidBB, IsHeap, CondBB);
-
-  // Instructions for FreeBB
-  auto* CallMalloc = CallInst::Create(FreeType, OrigFree, NewFree->getArg(0),
-      Twine(), FreeBB);
-  ReturnInst::Create(M.getContext(), FreeBB);
-
-  // Instructions for VoidBB
-  ReturnInst::Create(M.getContext(), VoidBB);
-
   return NewFree;
 }
 

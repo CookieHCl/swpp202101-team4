@@ -132,6 +132,18 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
     *os << "end " << symbolMap.get(&F)->getName() << "\n\n";
   }
 
+  // print free
+  *os << "start ____free 1:\n"
+         ".CondBB:\n"
+         "  r1 = icmp ugt arg1 123456 64 \n"
+         "  br r1 .FreeBB .VoidBB \n"
+         ".FreeBB:\n"
+         "  free arg1 \n"
+         "  ret \n"
+         ".VoidBB:\n"
+         "  ret \n"
+         "end ____free\n";
+
   if (os != &outs()) delete os;
   
   return PreservedAnalyses::all();
