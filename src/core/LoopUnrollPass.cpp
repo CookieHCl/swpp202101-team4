@@ -65,12 +65,15 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
 
       logs() << "LoopUnrollResult\n";
       switch(result) {
-        case LoopUnrollResult::Unmodified: logs() << "- Unmodified\n";
+        case LoopUnrollResult::Unmodified: {
+          logs() << "- Unmodified\n";
+          continue;
+        };
         case LoopUnrollResult::PartiallyUnrolled: logs() << "- Partial\n";
         case LoopUnrollResult::FullyUnrolled: logs() << "- Full\n";
       }
 
-      if (result != LoopUnrollResult::Unmodified) isChanged = true;
+      isChanged = true;
 
       if (Remainder) logs() << "There is remainder Loop : " << *Remainder << "\n";
 
@@ -79,7 +82,10 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
         bool isMerged = false;
         vector<BasicBlock*> BBs = L->getBlocksVector();
 
-        for (BasicBlock *BB : BBs) isMerged |= MergeBlockIntoPredecessor(BB, &DTU, &LI);
+        for (BasicBlock *BB : BBs) {
+          if (isa<BranchInst>(BB->getTerminator())) continue;
+            isMerged |= MergeBlockIntoPredecessor(BB, &DTU, &LI);
+        }
 
         // If cannot merge new blocks, terminate.
         if (!isMerged) break;
