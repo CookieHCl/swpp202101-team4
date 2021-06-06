@@ -308,11 +308,14 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
 
 //Terminator insts.
 void AssemblyEmitter::visitReturnInst(ReturnInst& I) {
+    // sp is automatically restored; no need to add
+    /*
     //increase sp(which was decreased in the beginning of the function.)
     Function* F = I.getFunction();
     if(spOffset[F] > 0) {
         *fout << emitInst({"sp = add sp",to_string(spOffset[F]),"64"});
     }
+    */
     *fout << emitInst({"ret", name(I.getReturnValue())});
 }
 void AssemblyEmitter::visitBranchInst(BranchInst& I) {
