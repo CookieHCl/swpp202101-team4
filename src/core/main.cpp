@@ -46,6 +46,7 @@ enum class Opts {
   FunctionInline,
   GVN,
   LoopVectorize,
+  MatmulTranspose,
   Phierase,
   RemoveUnused,
   SimplifyCFG,
@@ -62,6 +63,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(BranchPredict, "Set most used branch to false branch"),
       OPT_ENUM_VAL(FunctionInline, "Inline functions if possible"),
       OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
+      OPT_ENUM_VAL(MatmulTranspose, "LoopInterchange for more effective vectorize"),
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
       OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock."),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
@@ -117,6 +119,7 @@ int main(int argc, char *argv[]) {
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
 
   // Add IR passes
+  IFSET(MatmulTranspose, FPM.addPass(MatmulTransposePass(optPrintProgress)))
   IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
   IFSET(Arithmetic, FPM.addPass(ArithmeticPass()))
   IFSET(Phierase, FPM.addPass(PhierasePass()))
