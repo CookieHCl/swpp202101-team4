@@ -161,7 +161,26 @@ void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
           OuterLoopHeaderBI->getNumSuccessors() == 2 && InnerLoopHeaderBI->getNumSuccessors() == 2 &&
           OuterIncommingBI->getNumSuccessors() == 1 && InnerIncommingBI->getNumSuccessors() == 1)) continue;
       if(!(OuterLoopLatchBI->getSuccessor(0) == OuterLoopHeader && InnerLoopLatchBI->getSuccessor(0) == InnerLoopHeader)) continue;
-      if(!(Outer->contains(OuterLoopHeaderBI->getSuccessor(0)) && L->contains(InnerLoopHeaderBI->getSuccessor(0)))) continue;        
+      if(!(Outer->contains(OuterLoopHeaderBI->getSuccessor(0)) && L->contains(InnerLoopHeaderBI->getSuccessor(0)))) continue;
+
+      bool flag = true;
+      BranchInst *InnerToLatchBI, *OuterToLatchBI;
+      for (BasicBlock *BB : L->getBlocks()) {
+        if(BB == InnerLoopHeader) continue;
+        BranchInst *br = dyn_cast<BranchInst>(BB->getTerminator());
+        if(!br || br->getNumSuccessors() != 1) flag = false;
+        else if(br->getSuccessor(0) == InnerLoopLatch) InnerToLatchBI = br;
+      }
+      for (BasicBlock *BB : Outer->getBlocks()) {
+        if(BB == OuterLoopHeader || L->contains(BB)) continue;
+        BranchInst *br = dyn_cast<BranchInst>(BB->getTerminator());
+        if(!br || br->getNumSuccessors() != 1) flag = false;
+        else if(br->getSuccessor(0) == OuterLoopLatch) OuterToLatchBI = br;
+      }
+      if(!flag) continue;
+
+      InnerToLatchBI->setSuccessor(0, OuterLoopLatch);
+      OuterToLatchBI->setSuccessor(0, InnerLoopLatch);
       
       BasicBlock *OuterLoopBody = OuterLoopHeaderBI->getSuccessor(0);
       BasicBlock *InnerLoopBody = InnerLoopHeaderBI->getSuccessor(0);
