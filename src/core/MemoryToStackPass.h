@@ -5,6 +5,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
 
@@ -22,9 +23,10 @@ private:
   }
 
   Function* createNewMalloc(Module &M, Function* OrigMalloc,
-      Value* StackPointer, IntegerType* Int64Ty);
-  Function* createNewFree(Module &M, Function* OrigFree, IntegerType* Int64Ty);
+      Value* StackPointer, IntegerType* I64Ty);
+  Function* createNewFree(Module &M, Function* OrigFree, IntegerType* I64Ty);
 
+  void replaceAlloca(Module &M, Function* NewMalloc, IntegerType* I64Ty);
   void replaceFunction(Module &M, Function* OrigFun, Function* NewFun);
 
 public:

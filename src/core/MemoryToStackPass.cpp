@@ -96,6 +96,39 @@ Function* MemoryToStackPass::createNewFree(Module &M, Function* OrigFree,
   return NewFree;
 }
 
+// Return sizeof(T) in bytes.
+// Copied from Backend.cpp
+static unsigned getAccessSize(Type *T) {
+  if (isa<PointerType>(T))
+    return 8;
+  else if (isa<IntegerType>(T)) {
+    return T->getIntegerBitWidth() == 1 ? 1 : (T->getIntegerBitWidth() / 8);
+  } else if (isa<ArrayType>(T)) {
+    return getAccessSize(T->getArrayElementType()) * T->getArrayNumElements();
+  }
+  assert(false && "Unsupported access size type!");
+}
+
+// stack can conflict; replace alloca with new malloc so nobody use stack
+void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc,
+    IntegerType* I64Ty) {
+  for (Function &F : M) {
+    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
+        if (auto* Alloca = dyn_cast<AllocaInst>(&*I)) {
+          unsigned ptrSize = getAccessSize(Alloca->getAllocatedType());
+          logs() << "Alloca type: " << *(Alloca->getType()) << '\n';
+          logs() << "Alloca size: " << ptrSize << '\n';
+          auto* CallMalloc = CallInst::Create(NewMalloc->getFunctionType(),
+              NewMalloc, ConstantInt::get(I64Ty, ptrSize));
+          auto* CastMalloc = new BitCastInst(CallMalloc, Alloca->getType());
+
+          ReplaceInstWithInst(BasicBlock::InstListType &BIL,
+                               BasicBlock::iterator &BI, Instruction *I);
+        }
+    }
+  }
+}
+
 // replace all calls calling OrigFun except those inside NewFun
 void MemoryToStackPass::replaceFunction(Module &M, Function* OrigFun,
     Function* NewFun) {
@@ -123,7 +156,7 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   // If we don't have malloc, we don't need to change to stack at all
   if (!OrigMalloc) {
     logs() << "Module doesn't have malloc;\n"
-        << "---------- End MemoryToStackPass ----------";
+              "---------- End MemoryToStackPass ----------\n";
     return PreservedAnalyses::all();
   }
 
@@ -139,7 +172,8 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   Function* NewMalloc = createNewMalloc(M, OrigMalloc, StackPointer, I64Ty);
   Function* NewFree = createNewFree(M, OrigFree, I64Ty);
 
-  // replace malloc & free
+  // replace original functions
+  replaceAlloca(M, NewMalloc);
   replaceFunction(M, OrigMalloc, NewMalloc);
   replaceFunction(M, OrigFree, NewFree);
 
