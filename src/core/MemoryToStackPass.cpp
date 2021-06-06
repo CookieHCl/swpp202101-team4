@@ -1,24 +1,22 @@
 #include "MemoryToStackPass.h"
 
-const char* MemoryToStackPass::STACK_COUNTER_NAME = "____stacksize";
+const char* MemoryToStackPass::STACK_POINTER_NAME = "____sp";
 const char* MemoryToStackPass::NEW_MALLOC_NAME = "____malloc";
 const char* MemoryToStackPass::NEW_FREE_NAME = "____free";
-const char* MemoryToStackPass::STACK_ALLOC_NAME = "____stackalloc";
 
 /*
 // Note that in llvm, global variable is pointer
 ____malloc(size) {
-  if (size + *StackCounter > STACK_SIZE) { // CondBB
+  if (size > *StackPointer) { // CondBB
     return malloc(size); // MallocBB
   }
   else {
-    *StackCounter += size;
-    return ____stackalloc(size); // StackBB
+    return (*StackPointer -= size); // StackBB
   }
 }
 */
 Function* MemoryToStackPass::createNewMalloc(Module &M, Function* OrigMalloc,
-    Value* StackCounter, IntegerType* I64Ty) {
+    Value* StackPointer, IntegerType* I64Ty) {
   if (!OrigMalloc) {
     llvm_unreachable("There must be malloc to use stack");
   }
@@ -27,20 +25,15 @@ Function* MemoryToStackPass::createNewMalloc(Module &M, Function* OrigMalloc,
   Function* NewMalloc = Function::Create(MallocType, Function::ExternalLinkage,
       NEW_MALLOC_NAME, M);
   NewMalloc->setAttributes(OrigMalloc->getAttributes());
-  Function* StackAlloc = Function::Create(MallocType, Function::ExternalLinkage,
-      STACK_ALLOC_NAME, M);
-  StackAlloc->setAttributes(OrigMalloc->getAttributes());
 
   BasicBlock* CondBB = BasicBlock::Create(M.getContext(), Twine(), NewMalloc);
   BasicBlock* MallocBB = BasicBlock::Create(M.getContext(), Twine(), NewMalloc);
   BasicBlock* StackBB = BasicBlock::Create(M.getContext(), Twine(), NewMalloc);
 
   // Instructions for CondBB
-  auto* OldSize = new LoadInst(I64Ty, StackCounter, Twine(), CondBB);
-  auto* NewSize = BinaryOperator::Create(BinaryOperator::Add,
-      NewMalloc->getArg(0), OldSize, Twine(), CondBB);
-  auto* HasOverflow = new ICmpInst(*CondBB, ICmpInst::ICMP_SGT,
-      NewSize, ConstantInt::getSigned(I64Ty, STACK_SIZE));
+  auto* RemainingSize = new LoadInst(I64Ty, StackPointer, Twine(), CondBB);
+  auto* HasOverflow = new ICmpInst(*CondBB, ICmpInst::ICMP_UGT,
+      NewMalloc->getArg(0), RemainingSize);
   BranchInst::Create(MallocBB, StackBB, HasOverflow, CondBB);
 
   // Instructions for MallocBB
@@ -49,10 +42,12 @@ Function* MemoryToStackPass::createNewMalloc(Module &M, Function* OrigMalloc,
   ReturnInst::Create(M.getContext(), CallMalloc, MallocBB);
 
   // Instructions for StackBB
-  new StoreInst(NewSize, StackCounter, StackBB);
-  auto* CallStackAlloc = CallInst::Create(MallocType, StackAlloc,
-      NewMalloc->getArg(0), Twine(), StackBB);
-  ReturnInst::Create(M.getContext(), CallStackAlloc, StackBB);
+  auto* NewSize = BinaryOperator::Create(BinaryOperator::Sub,
+      RemainingSize, NewMalloc->getArg(0), Twine(), StackBB);
+  new StoreInst(NewSize, StackPointer, StackBB);
+  auto* NewPointer = new IntToPtrInst(NewSize, MallocType->getReturnType(),
+      Twine(), StackBB);
+  ReturnInst::Create(M.getContext(), NewPointer, StackBB);
 
   return NewMalloc;
 }
@@ -135,13 +130,13 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   // It's normal to not have free; don't check it
   Function* OrigFree = M.getFunction("free");
 
-  // global variable to count stack's size
-  auto* StackCounter = new GlobalVariable(M, I64Ty, false,
-      GlobalVariable::PrivateLinkage, ConstantInt::getNullValue(I64Ty),
-      STACK_COUNTER_NAME);
+  // global variable to count stack's size; sp = left size
+  auto* StackPointer = new GlobalVariable(M, I64Ty, false,
+      GlobalVariable::PrivateLinkage, ConstantInt::get(I64Ty, STACK_SIZE),
+      STACK_POINTER_NAME);
 
   // create new malloc & free
-  Function* NewMalloc = createNewMalloc(M, OrigMalloc, StackCounter, I64Ty);
+  Function* NewMalloc = createNewMalloc(M, OrigMalloc, StackPointer, I64Ty);
   Function* NewFree = createNewFree(M, OrigFree, I64Ty);
 
   // replace malloc & free

@@ -230,11 +230,11 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
         assert(args.size()==1 && "argument of free() should be 1");
         *fout << emitInst({"free", name(I.getArgOperand(0))});
     }
-    else if(Fname == "____stackalloc") {
+    /*else if(Fname == "____stackalloc") {
         assert(args.size()==1 && "argument of ____stackalloc() should be 1");
         *fout << emitInst({"sp = sub sp", name(I.getArgOperand(0)), "64"})
             << emitInst({name(&I), "= mul sp 1 64"});
-    }
+    }*/
     else if(UnfoldVectorInstPass::VLOADS.find(Fname) != UnfoldVectorInstPass::VLOADS.end()) {
         vector<string> asmb;
         int n = atoi(Fname.substr(Fname.size() - 1, 1).c_str());
