@@ -344,7 +344,7 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
   if (validSchemes.size() <= 1) return false;
 
   SetVector<int> sourceIDs;
-  for (ConScheme scheme : validSchemes) 
+  for (ConScheme scheme : validSchemes)
     sourceIDs.insert(scheme.sourceID);
 
   for (int sid : sourceIDs) {
@@ -356,7 +356,7 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
     logs() << "SourceID : " << sid << "\n";
     for (ConScheme &scheme : sidSchemes)
       logs() << scheme << "\n";
-    
+
     while (!schemeQueue.empty()) {
       // For all iteration, at least one element is popped so must be terminated.
       ConScheme scheme = schemeQueue.front();
@@ -368,13 +368,13 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
         ConScheme toCheck = schemeQueue.front();
         schemeQueue.pop();
 
-        if ((toCheck.displ - scheme.displ < MAX_VECTOR_SIZE * ptrSize) && 
-            ((isLoad && isLoadForwardable(scheme.memInst, toCheck.memInst, DT, SE)) || 
+        if ((toCheck.displ - scheme.displ < MAX_VECTOR_SIZE * ptrSize) &&
+            ((isLoad && isLoadForwardable(scheme.memInst, toCheck.memInst, DT, SE)) ||
              (!isLoad && isStoreBackwardable(scheme.memInst, toCheck.memInst, DT, SE)))) {
             toVectorize.push_back(toCheck);
             continue;
           }
-        
+
         schemeQueue.push(toCheck);
       }
 
@@ -385,7 +385,7 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
 
       ConScheme maxDisplScheme = *max_element(toVectorize.begin(), toVectorize.end());
       ConScheme minDisplScheme = *min_element(toVectorize.begin(), toVectorize.end());
-      
+
       // This is for only duplicated load/store with no dependence like
       // %0 = load i64, i64* @checked, align 8
       // %1 = load i64, i64* @checked, align 8
