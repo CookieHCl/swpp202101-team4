@@ -114,17 +114,17 @@ void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc,
     IntegerType* I64Ty) {
   for (Function &F : M) {
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-        if (auto* Alloca = dyn_cast<AllocaInst>(&*I)) {
-          unsigned ptrSize = getAccessSize(Alloca->getAllocatedType());
-          logs() << "Alloca type: " << *(Alloca->getType()) << '\n';
-          logs() << "Alloca size: " << ptrSize << '\n';
-          auto* CallMalloc = CallInst::Create(NewMalloc->getFunctionType(),
-              NewMalloc, ConstantInt::get(I64Ty, ptrSize));
-          auto* CastMalloc = new BitCastInst(CallMalloc, Alloca->getType());
+      if (auto* Alloca = dyn_cast<AllocaInst>(&*I)) {
+        unsigned ptrSize = getAccessSize(Alloca->getAllocatedType());
+        logs() << "Alloca type: " << *(Alloca->getType()) << '\n';
+        logs() << "Alloca size: " << ptrSize << '\n';
+        auto* CallMalloc = CallInst::Create(NewMalloc->getFunctionType(),
+            NewMalloc, ConstantInt::get(I64Ty, ptrSize), Twine(), Alloca);
+        auto* CastMalloc = new BitCastInst(CallMalloc, Alloca->getType());
 
-          ReplaceInstWithInst(BasicBlock::InstListType &BIL,
-                               BasicBlock::iterator &BI, Instruction *I);
-        }
+        logs() << "Replace with " << *CallMalloc << '\n' << *CastMalloc << '\n';
+        ReplaceInstWithInst(Alloca, CastMalloc);
+      }
     }
   }
 }
