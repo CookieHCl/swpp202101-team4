@@ -15,9 +15,12 @@ void rotateLoop(Function &F, FunctionAnalysisManager &FAM) {
   SimplifyQuery SQ = getBestSimplifyQuery(FAM, F);
 
   bool isChanged = false;
-  for (Loop *L : LI.getLoopsInPreorder())
-    if ((isChanged = LoopRotation(L, &LI, &TTI, &AC, &DT, &SE, &MSSAU, SQ, true, -1, true)))
-      LAM.invalidate(*L, getLoopPassPreservedAnalyses());
+  for (Loop *L : LI.getLoopsInPreorder()) {
+    if (LoopRotation(L, &LI, &TTI, &AC, &DT, &SE, &MSSAU, SQ, true, -1, true)) {
+      LAM.invalidate(*L, PreservedAnalyses::none());
+      isChanged = true;
+    }
+  }
 
   if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
 }
@@ -35,11 +38,12 @@ void makeSimplifyLCSSA(Function &F, FunctionAnalysisManager &FAM) {
   
   bool isGlobalChanged = false;
   for (Loop *L : LI.getLoopsInPreorder()) {
-    bool isChanged = false;
-    isChanged |= simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
-    isChanged |= formLCSSARecursively(*L, DT, &LI, nullptr);
+    bool isChanged = simplifyLoop(L, &DT, &LI, &SE, &AC, &MSSAU, false);
+    if (isChanged) LAM.invalidate(*L, PreservedAnalyses::none());
     isGlobalChanged |= isChanged;
-    if (isChanged) LAM.invalidate(*L, getLoopPassPreservedAnalyses());
+    isChanged = formLCSSARecursively(*L, DT, &LI, nullptr);
+    if (isChanged) LAM.invalidate(*L, PreservedAnalyses::none());
+    isGlobalChanged |= isChanged;
   }
 
   if (isGlobalChanged) FAM.invalidate(F, PreservedAnalyses::none());
