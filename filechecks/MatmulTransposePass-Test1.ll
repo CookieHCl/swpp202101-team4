@@ -5,6 +5,12 @@ target triple = "x86_64-apple-macosx11.0.0"
 
 ; Function Attrs: nounwind ssp uwtable
 define dso_local void @matmul(i32 %dim, i64* %c, i64* %a, i64* %b) #0 {
+; CHECK-DAG: load
+; CHECK-DAG: br
+; CHECK-DAG: load
+; CHECK-DAG: load
+; CHECK-DAG: store
+
 entry:
   br label %for.cond
 

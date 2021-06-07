@@ -1,7 +1,9 @@
 #include "MatmulTransposePass.h"
 
 
-void MatmulTransposePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM) {
+/* In order to optimize the loop, its induction need to be a PHInode. (Scalar Evolution)
+ */
+bool MatmulTransposePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM) {
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
 
@@ -21,19 +23,21 @@ void MatmulTransposePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &
   }
 
   if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
+  return isChanged;
 }
 
-/*
- * remove %sum.0 value in matmul1.ll for Transpose
+/* STEP 1. remove %Sum.0 register in matmul1.ll
+ *  this step is only for matmul1
+ *  Interchange is possible only when %sum.0 is deleted.
  */
-void MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FAM) {
+bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FAM) {
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
 
   for (Loop *L : LI.getLoopsInPreorder()) {
     if (L->isInnermost()) {
-      BasicBlock *incomming;    // Incomming edge
-      BasicBlock *backedge;     // Back edge
+      BasicBlock *incomming;    /* Incomming edge */
+      BasicBlock *backedge;     /* Back edge */
       if(!L->getIncomingAndBackEdge(incomming, backedge)) continue;
       PHINode *loop_cond = L->getCanonicalInductionVariable();
 
@@ -75,9 +79,8 @@ void MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
           }
           if(!flag) continue;
 
-          // All values to find ptrElement of storeInst must be loopInvariant
-          //  that means C[i * dim + j] must be loopInvariant
-          
+          // All values to find ptrElement of storeInst should be loopInvariant about L
+          //  C[i * dim + j] should be loopInvariant in matmul1
           BasicBlock *for_end = storeInst->getParent();
           vector<Instruction *> relPtrInsts;
           relPtrInsts.push_back(ptrInst);
@@ -89,7 +92,7 @@ void MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
               if(!L->isLoopInvariant(v)) flag = false;
               Instruction *I1 = dyn_cast<Instruction>(v);
               if(I1 && I1->getParent() == for_end) {
-                if(I1 -> hasOneUser()) relPtrInsts.push_back(I1);
+                if(I1 -> hasOneUser()) relPtrInsts.push_back(I1);   /* there is only one user */
                 else flag = false;
               }
             }
@@ -112,14 +115,19 @@ void MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
             phi->eraseFromParent();
 
             FAM.invalidate(F, PreservedAnalyses::none());
-            return;
+            logs() << "[@" << F.getName() <<"] remove sum reg!!" << "\n";
+            return true;
           }
         }
       }
     }
   }
+  return false;
 }
 
+/* find Canonical Variable
+ *  Initialize with constant and added by a constant.
+ */
 PHINode *MatmulTransposePass::getCanonicalVariable(Loop *L) {
   BasicBlock *H = L->getHeader();
 
@@ -141,9 +149,11 @@ PHINode *MatmulTransposePass::getCanonicalVariable(Loop *L) {
   return nullptr;
 }
 
-bool MatmulTransposePass::isConstantRange(Loop *L, const SCEV *target, Loop *Outer, ScalarEvolution &SE) {
+/* CHECK 1. constant range
+ *  range of CanonicalVariable must be constant
+ */
+bool MatmulTransposePass::isConstantRange(Loop *L, const SCEV *target, Loop *Outer, ScalarEvolution &SE, bool from) {
   SCEVTypes scevType = target->getSCEVType();
-  logs() << "isConstantRange : " << *target <<"\n";
   switch (scevType) {
     case SCEVTypes::scMulExpr:
     case SCEVTypes::scUDivExpr:
@@ -155,15 +165,16 @@ bool MatmulTransposePass::isConstantRange(Loop *L, const SCEV *target, Loop *Out
       const SCEVNAryExpr *narySCEV = dyn_cast<SCEVNAryExpr>(target);
       bool rev = true;
       for (int i = 0; i < narySCEV->getNumOperands(); ++i)
-        rev &= this->isConstantRange(L, narySCEV->getOperand(i), Outer, SE);
+        rev &= this->isConstantRange(L, narySCEV->getOperand(i), Outer, SE, from);
       return rev;
     }
     case SCEVTypes::scAddRecExpr: {
       const SCEVAddRecExpr *addRecSCEV = dyn_cast<SCEVAddRecExpr>(target);
-      if(addRecSCEV->getLoop() != L) return false;
+      if(from && addRecSCEV->getLoop() != L) return false;
+      if(!from && addRecSCEV->getLoop() == L) return false;
       bool rev = true;
       for (int i = 0; i < addRecSCEV->getNumOperands(); ++i)
-        rev &= this->isConstantRange(L, addRecSCEV->getOperand(i), Outer, SE);
+        rev &= this->isConstantRange(L, addRecSCEV->getOperand(i), Outer, SE, from);
       return rev;
     }
     case SCEVTypes::scConstant: return true;
@@ -175,12 +186,15 @@ bool MatmulTransposePass::isConstantRange(Loop *L, const SCEV *target, Loop *Out
     case SCEVTypes::scZeroExtend:
     case SCEVTypes::scSignExtend: {
       const SCEVCastExpr *castSCEV = dyn_cast<SCEVCastExpr>(target);
-      return this->isConstantRange(L, castSCEV->getOperand(), Outer, SE);
+      return this->isConstantRange(L, castSCEV->getOperand(), Outer, SE, from);
     }
     default: return false;
   }
 }
 
+/* CHECK 2. OuterLoop body = InnerLoop body
+ *  no Call Instruction & no Store or Load in OuterLoop body
+ */
 bool MatmulTransposePass::noAdditionalOuterBody(Loop *InnerLoop, Loop *OuterLoop) {
   for (BasicBlock *BB : OuterLoop->getBlocks()) {
     if(InnerLoop->contains(BB)) continue;
@@ -192,6 +206,10 @@ bool MatmulTransposePass::noAdditionalOuterBody(Loop *InnerLoop, Loop *OuterLoop
   return true;
 }
 
+/* This function is for isThereOnlySigmaStore (CHECK 3.)
+ *  Check the target is loop invariant about OuterLoop
+ *  or Load Instruction that has loop invariant index and source different from ptrAddr.
+ */
 bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loop *OuterLoop, ScalarEvolution &SE) {
   SCEVTypes scevType = target->getSCEVType();
   switch (scevType) {
@@ -233,23 +251,28 @@ bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loo
   }
 }
 
+/* CHECK 3. check body load store relation
+ *  The store Instruction should have this form below.
+ *  
+ *  Array[(loop Invariant index)] += (loop Invariant value / Load from another array)
+ */
 bool MatmulTransposePass::isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE) {
   for (BasicBlock *BB : InnerLoop->getBlocks()) {
     for (Instruction &I : *BB) {
       if(dyn_cast<CallInst>(&I)) return false;
 
       StoreInst *store;
-      if(!(store = dyn_cast<StoreInst>(&I))) continue;
+      if(!(store = dyn_cast<StoreInst>(&I))) continue;    /* Check for all store Instructions */
       if(!store->isSimple()) return false;
 
       // store value to ptr -> value should be (load ptr) + (something)
       // that means *ptr += something; in C
       BinaryOperator* addInst = dyn_cast<BinaryOperator>(store->getValueOperand());
-      if(!addInst || addInst->getOpcode() != Instruction::Add) return false;                    // should be addInst
+      if(!addInst || addInst->getOpcode() != Instruction::Add) return false;
 
       LoadInst *load = dyn_cast<LoadInst>(addInst->getOperand(0));
       if(!load || !load->isSimple()) return false;
-      if(store->getPointerOperand() != load->getPointerOperand()) return false;   // should be same ptr
+      if(store->getPointerOperand() != load->getPointerOperand()) return false;
 
       // now check (something)
       GetElementPtrInst *ptrInst = dyn_cast<GetElementPtrInst>(store->getPointerOperand());
@@ -264,17 +287,16 @@ bool MatmulTransposePass::isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop
   return true;
 }
 
-void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &FAM) {
+/* STEP 2. InterChange Loop if possible
+ */
+bool MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &FAM) {
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  DependenceInfo &DI = FAM.getResult<DependenceAnalysis>(F);
-  OptimizationRemarkEmitter &ORE = FAM.getResult<OptimizationRemarkEmitterAnalysis>(F);
 
   Loop *Outer = nullptr;
 
   for (Loop *L : LI.getLoopsInPreorder()) {
-    if(L->isInnermost()) {
+    if(L->isInnermost() && Outer) {
       BasicBlock *InnerLoopHeader = L->getHeader();
       BasicBlock *OuterLoopHeader = Outer->getHeader();
       BasicBlock *InnerLoopLatch = L->getLoopLatch();
@@ -298,6 +320,8 @@ void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
       BranchInst *InnerIncommingBI =
           dyn_cast<BranchInst>(InnerIncomming->getTerminator());
 
+      // Analyze the structure of the loop
+      //  and determining whether the structure is what we want.
       if(!(OuterLoopLatchBI && InnerLoopLatchBI && OuterLoopHeaderBI && InnerLoopHeaderBI && OuterIncommingBI && InnerIncommingBI)) continue;
       if(!(OuterLoopLatchBI->getNumSuccessors() == 1 && InnerLoopLatchBI->getNumSuccessors() == 1 &&
           OuterLoopHeaderBI->getNumSuccessors() == 2 && InnerLoopHeaderBI->getNumSuccessors() == 2 &&
@@ -325,16 +349,26 @@ void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
       PHINode *OuterLoopCanVar = getCanonicalVariable(Outer);
       if(!InnerLoopCanVar || !OuterLoopCanVar) continue;
 
+      // Now We should determine whether it is interchangeable or not.
+      // There are three criteria for judging.
+      // 
       // CHECK 1. constant range
-      if(!(isConstantRange(L, SE.getSCEV(InnerLoopCanVar), Outer, SE) &&
-           isConstantRange(Outer, SE.getSCEV(OuterLoopCanVar), Outer, SE))) continue;
+      //  range of CanonicalVariable must be constant
+      if(!(isConstantRange(L, SE.getSCEV(InnerLoopCanVar), Outer, SE, true) &&
+           isConstantRange(Outer, SE.getSCEV(OuterLoopCanVar), Outer, SE, true))) continue;
       
       // CHECK 2. OuterLoop body = InnerLoop body
+      //  no Call Instruction & no Store or Load in OuterLoop body
       if(!noAdditionalOuterBody(L, Outer)) continue;
 
       // CHECK 3. check body load store relation
+      //  The store Instruction should have this form below.
+      //  
+      //  Array[(loop Invariant index)] += (loop Invariant value / Load from another array)
       if(!isThereOnlySigmaStore(L, Outer, SE)) continue;
+      
 
+      // Interchange L and Outer
       InnerToLatchBI->setSuccessor(0, OuterLoopLatch);
       OuterToLatchBI->setSuccessor(0, InnerLoopLatch);
       
@@ -353,27 +387,110 @@ void MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
 
       OuterIncommingBI->setSuccessor(0, InnerLoopHeader);
       InnerIncommingBI->setSuccessor(0, OuterLoopHeader);
-
-      logs() << "InnerLoopLatchBI : " << *InnerLoopLatchBI << "\n";
-      logs() << "InnerLoopHeaderBI : " << *InnerLoopHeaderBI << "\n";
-      logs() << "OuterLoopLatchBI : " << *OuterLoopLatchBI << "\n";
-      logs() << "OuterLoopHeaderBI : " << *OuterLoopHeaderBI << "\n";
       
       FAM.invalidate(F, PreservedAnalyses::none());
-      return;
+      logs() << "[@" << F.getName() <<"] InterChanged!!" << "\n";
+      return true;
     }
     Outer = L;
   }
+  return false;
+}
+
+/* STEP 3. hoist Load Instructions to OuterLoop when LoopInvariant about InnerLoop
+ */
+bool MatmulTransposePass::hoistLoad(Function &F, FunctionAnalysisManager &FAM) {
+  ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+
+  Loop *Outer = nullptr;
+
+  for (Loop *L : LI.getLoopsInPreorder()) {
+    if(L->isInnermost() && Outer) {
+      for (BasicBlock *BB : L->getBlocks()) {
+        // L : InnerLoop  Outer : OuterLoop
+        for (Instruction &I : *BB) {
+          LoadInst *load = dyn_cast<LoadInst>(&I);
+          if(!load || !load->isSimple()) continue;
+          GetElementPtrInst *ptrInst = dyn_cast<GetElementPtrInst>(load->getPointerOperand());
+          if(!ptrInst) continue;
+          if(!L->isLoopInvariant(ptrInst->getOperand(0))) continue;
+          if(!isConstantRange(L, SE.getSCEV(ptrInst->getOperand(1)), L, SE, false)) continue;
+
+          vector<Instruction *> relPtrInsts;
+          relPtrInsts.push_back(ptrInst);
+          bool flag = true;
+
+          for (int now = 0; now < relPtrInsts.size(); ++now) {
+            for (unsigned i = 0; i < relPtrInsts[now]->getNumOperands(); ++i) {
+              Value *v = relPtrInsts[now]->getOperand(i);
+              Instruction *I1 = dyn_cast<Instruction>(v);
+              if(I1 && I1->getParent() == BB) {
+                if(I1->hasOneUser()) relPtrInsts.push_back(I1);
+                else flag = false;
+              }
+              else if(!L->isLoopInvariant(v)) flag = false;
+            }
+            if(!flag) break;
+          }
+          if(!flag) continue;
+
+          Instruction *insertBeforeThis = nullptr;
+          for (BasicBlock *BB1 : Outer->getBlocks()) {
+            if(L->contains(BB1)) continue;
+            BranchInst *br = dyn_cast<BranchInst>(BB1->getTerminator());
+            if(br && br->getNumSuccessors() == 1 && br->getSuccessor(0) == L->getHeader()){
+              insertBeforeThis = br;
+            }
+          }
+          if(!insertBeforeThis) continue;
+          
+          Instruction *cloned;
+          for(int i = relPtrInsts.size() - 1; i >= 0 ; --i) {
+            cloned = relPtrInsts[i]->clone();
+            cloned->insertBefore(insertBeforeThis);
+            relPtrInsts[i]->replaceAllUsesWith(cloned);
+          }
+          cloned = load->clone();
+          cloned->insertBefore(insertBeforeThis);
+          load->replaceAllUsesWith(cloned);
+
+          // now we can move relPtrInsts into Loop
+          load->eraseFromParent();
+          for(int i = 0; i < relPtrInsts.size(); ++i)
+            relPtrInsts[i]->eraseFromParent();
+          
+          FAM.invalidate(F, PreservedAnalyses::none());
+          logs() << "[@" << F.getName() <<"] Hoisted!!" << "\n";
+          return true;
+        }
+      }
+    }
+    Outer = L;
+  }
+  return false;
 }
 
 PreservedAnalyses MatmulTransposePass::run(Function &F, FunctionAnalysisManager &FAM) {
-  bool isChanged = false;
   logs() << "[MatmulTranspose Progress in @" << F.getName() << "]\n";
+  bool isChanged = false;
 
   // In order to optimize the loop, its induction need to be a PHInode. (Scalar Evolution)
-  this->makeAllocaAsPHI(F, FAM);
-  this->rmSumRegister(F, FAM);
-  this->loopInterChange(F, FAM);
+  isChanged |= this->makeAllocaAsPHI(F, FAM);
+
+  // STEP 1. remove %Sum.0 register in matmul1.ll
+  //  this step is only for matmul1
+  //  Interchange is possible only when %sum.0 is deleted.
+  logs() << "rmSumReg!\n";
+  isChanged |= this->rmSumRegister(F, FAM);
+
+  // STEP 2. InterChange Loop if possible
+  logs() << "Interchange!\n";
+  isChanged |= this->loopInterChange(F, FAM);
+
+  // STEP 3. hoist Load Instructions to OuterLoop when LoopInvariant about InnerLoop
+  logs() << "hoistLoad!\n";
+  while(this->hoistLoad(F, FAM)) isChanged = true;
 
   return isChanged ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

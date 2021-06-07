@@ -37,13 +37,14 @@ private:
   PHINode *getCanonicalVariable(Loop *L);
   bool isValidtoAdded(const SCEV *target, Value *ptrAddr, Loop *OuterLoop, ScalarEvolution &SE);
 
-  bool isConstantRange(Loop *L, const SCEV *target, Loop *Outer, ScalarEvolution &SE);
+  bool isConstantRange(Loop *L, const SCEV *target, Loop *Outer, ScalarEvolution &SE, bool from);
   bool noAdditionalOuterBody(Loop *InnerLoop, Loop *OuterLoop);
   bool isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE);
 
-  void rmSumRegister(Function &F, FunctionAnalysisManager &FAM);
-  void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
-  void loopInterChange(Function &F, FunctionAnalysisManager &FAM);
+  bool rmSumRegister(Function &F, FunctionAnalysisManager &FAM);
+  bool makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
+  bool loopInterChange(Function &F, FunctionAnalysisManager &FAM);
+  bool hoistLoad(Function &F, FunctionAnalysisManager &FAM);
 
 public:
   MatmulTransposePass(bool isVerbose = false) : isVerbose(isVerbose) {}
