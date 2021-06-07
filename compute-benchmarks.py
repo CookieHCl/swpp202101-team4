@@ -5,19 +5,26 @@ import pandas as pd
 import subprocess
 import sys
 
-def avg(iterable):
-    return sum(iterable) / len(iterable)
+def safe_remove(filename):
+    try:
+        os.remove(filename)
+    except FileNotFoundError:
+        pass
 
-def strjoin(delimiter, iterable):
-    return delimiter.join(map(str, iterable))
+def read_cost(folder, benchmark):
+    filename = f'{folder}/{benchmark}.csv'
+    if os.path.exists(filename):
+        # remove current commit's log
+        # remove avg to calculate later
+        return pd.read_csv(filename, index_col='commit').drop(index = REPO_COMMIT, columns = 'avg', errors = 'ignore')
+    else:
+        cost_file = pd.DataFrame()
+        cost_file.index.rename('commit', inplace=True)
+        return cost_file
 
-def already_logged():
-    with open('results/SUMMARY.csv', 'r') as file:
-        content = file.readlines()
-        for line in content:
-            if line.partition(",")[0] == REPO_COMMIT:
-                return True
-    return False
+def write_cost(folder, benchmark, cost_file):
+    cost_file.to_csv(f'{folder}/{benchmark}.csv', index_label='commit',na_rep='nan')
+
 
 # parse arguments
 if len(sys.argv) != 3:
@@ -28,9 +35,6 @@ BENCHMARK_DIR = sys.argv[2]
 
 # get git commit
 with git.Repo('.') as repo:
-    if repo.is_dirty(untracked_files=True):
-        #sys.exit("ERROR: git repo is dirty; commit or stash")
-        pass
     repo_summary = repo.commit().summary.partition(']')
     REPO_COMMIT = repo_summary[2].strip() if repo_summary[1] else repo_summary[0].strip()
 
@@ -39,41 +43,28 @@ benchmarks = {}
 
 # get benchmark & tests
 with os.scandir(BENCHMARK_DIR) as entries:
-    for benchmark in sorted(f.name for f in entries if f.is_dir() and f.name != '.git'):
-        benchmarks[benchmark] = sorted(f for f in os.listdir(f'{BENCHMARK_DIR}/{benchmark}/test') if f.startswith('input'))
+    for benchmark in [f.name for f in entries if f.is_dir() and f.name != '.git']:
+        benchmarks[benchmark] = [f for f in os.listdir(f'{BENCHMARK_DIR}/{benchmark}/test') if f.startswith('input')]
 
-# create initial cost file
-if not os.path.exists('results'):
-    os.makedirs('results')
-    with open('results/SUMMARY.csv', 'w') as file:
-        file.write(f"commit,avg,{strjoin(',', benchmarks)}\n")
-    for benchmark, tests in benchmarks.items():
-        with open(f'results/{benchmark}.csv', 'w') as file:
-            file.write(f"commit,avg,{strjoin(',', tests)}\n")
 
-# check if commit is already logged
-if already_logged():
-    print("WARNING: already logged this commit; removing previous log")
-    with open('results/SUMMARY.csv', 'r+') as file:
-        content = file.readlines()
-        file.seek(0)
-        file.truncate()
-        for line in content:
-            if line.partition(",")[0] != REPO_COMMIT:
-                file.write(line)
-    for benchmark in benchmarks:
-        with open(f'results/{benchmark}.csv', 'r+') as file:
-            content = file.readlines()
-            file.seek(0)
-            file.truncate()
-            for line in content:
-                if line.partition(",")[0] != REPO_COMMIT:
-                    file.write(line)
+# make dir
+os.makedirs('results', exist_ok=True)
+os.makedirs('ratio_results', exist_ok=True)
 
-# {benchmark name : {input file name : cost}}
-test_cost = {}
-# {benchmark name : average benchmark cost}
-avg_cost = {}
+# read cost file
+print("Reading costs...")
+
+summary_cost = read_cost('results', 'SUMMARY')
+# {benchmark name : cost DataFrame}
+benchmark_costs = {}
+for benchmark in benchmarks:
+    benchmark_costs[benchmark] = read_cost('results', benchmark)
+
+summary_cost_ratio = read_cost('ratio_results', 'SUMMARY')
+# {benchmark name : cost ratio DataFrame}
+benchmark_cost_ratios = {}
+for benchmark in benchmarks:
+    benchmark_cost_ratios[benchmark] = read_cost('ratio_results', benchmark)
 
 # run benchmarks
 print("Running benchmarks...")
@@ -97,23 +88,50 @@ for benchmark, tests in benchmarks.items():
                     cost = float(content[1][6:])
                     mem = float(content[2][24:])
                     benchmark_cost[input_file] = cost + mem
-                    #print(f'benchmark {benchmark} test {input_file}: cost {cost + mem}')
+                    print(f'benchmark {benchmark} test {input_file}: cost {cost}, memcost {mem}')
 
-    test_cost[benchmark] = benchmark_cost
-    avg_cost[benchmark] = avg(benchmark_cost.values())
+    benchmark_costs[benchmark] = benchmark_costs[benchmark].append(pd.DataFrame(benchmark_cost, index = [REPO_COMMIT]))
 
-# remove temporary files
-os.remove('tmp.s')
-os.remove('sf-interpreter.log')
-os.remove('sf-interpreter-cost.log')
+    # remove temporary files
+    safe_remove('tmp.s')
+    safe_remove('sf-interpreter.log')
+    safe_remove('sf-interpreter-cost.log')
+
+# {benchmark name : average benchmark cost}
+avg_cost = {}
+
+# compute avg & ratio
+for benchmark, benchmark_cost in benchmark_costs.items():
+    benchmark_cost_ratios[benchmark] = benchmark_cost_ratios[benchmark].append(
+        benchmark_cost.iloc[-1].div(benchmark_cost.iloc[0]).rename(REPO_COMMIT)
+    )
+    benchmark_cost.sort_index(axis = 1, inplace = True)
+    benchmark_cost.insert(0, 'avg', benchmark_cost.mean(axis = 1, skipna = False))
+    avg_cost[benchmark] = benchmark_cost.at[REPO_COMMIT, 'avg']
+summary_cost = summary_cost.append(pd.DataFrame(avg_cost, index = [REPO_COMMIT])).sort_index(axis = 1)
+summary_cost.insert(0, 'avg', summary_cost.mean(axis = 1, skipna = False))
+
+# {benchmark name : average benchmark cost ratio}
+avg_cost_ratio = {}
+
+# compute ratio avg
+for benchmark, benchmark_cost_ratio in benchmark_cost_ratios.items():
+    benchmark_cost_ratio.sort_index(axis = 1, inplace = True)
+    benchmark_cost_ratio.insert(0, 'avg', benchmark_cost_ratio.mean(axis = 1, skipna = False))
+    avg_cost_ratio[benchmark] = benchmark_cost_ratio.at[REPO_COMMIT, 'avg']
+summary_cost_ratio = summary_cost_ratio.append(pd.DataFrame(avg_cost_ratio, index = [REPO_COMMIT])).sort_index(axis = 1)
+summary_cost_ratio.insert(0, 'avg', summary_cost_ratio.mean(axis = 1, skipna = False))
+
 
 # write to cost file
 print("Writing costs...")
-for benchmark, benchmark_cost in test_cost.items():
-    with open(f'results/{benchmark}.csv', 'a') as file:
-        file.write(f"{REPO_COMMIT},{avg(benchmark_cost.values())},{strjoin(',', benchmark_cost.values())}\n")
 
-with open('results/SUMMARY.csv', 'a') as file:
-    file.write(f"{REPO_COMMIT},{avg(avg_cost.values())},{strjoin(',', avg_cost.values())}\n")
+write_cost('results', 'SUMMARY', summary_cost)
+for benchmark, benchmark_cost in benchmark_costs.items():
+    write_cost('results', benchmark, benchmark_cost)
+
+write_cost('ratio_results', 'SUMMARY', summary_cost_ratio)
+for benchmark, benchmark_cost_ratio in benchmark_cost_ratios.items():
+    write_cost('ratio_results', benchmark, benchmark_cost_ratio)
 
 print("Success!")
