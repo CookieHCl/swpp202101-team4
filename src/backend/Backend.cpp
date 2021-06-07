@@ -133,7 +133,8 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
   }
 
   /*
-  // 102392 stores left size and is initialized with 102392
+  // 102392 stores left stack size and is initialized with 102392;
+  // see AssemblyEmitter.cpp
   ____malloc(size) {
     if (size > *102392) { // CondBB
       return malloc(size); // MallocBB
