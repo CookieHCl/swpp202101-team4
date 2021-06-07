@@ -83,7 +83,7 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
         vector<BasicBlock*> BBs = L->getBlocksVector();
 
         for (BasicBlock *BB : BBs) {
-          if (isa<BranchInst>(BB->getTerminator())) continue;
+          if (isa<BranchInst>(BB->getTerminator()))
             isMerged |= MergeBlockIntoPredecessor(BB, &DTU, &LI);
         }
 
