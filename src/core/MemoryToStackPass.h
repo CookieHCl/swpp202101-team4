@@ -10,10 +10,6 @@ using namespace llvm;
 
 class MemoryToStackPass : public PassInfoMixin<MemoryToStackPass> {
 private:
-  static const char* STACK_POINTER_NAME; // "____sp"
-  static const char* NEW_MALLOC_NAME; // "____malloc"
-  static const char* NEW_FREE_NAME; // "____free"
-
   const bool isVerbose;
   // stream for logging; only prints if verbose
   raw_ostream& logs() const {

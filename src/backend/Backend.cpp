@@ -159,6 +159,9 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
       "end ____malloc\n";
 
   /*
+  // pointer is in stack if it's less than 102400,
+  // and pointer is in heap if it's greater than or equal to 204800.
+  // so use any value in middle to determine if pointer is in heap
   ____free(p) {
     if (p > 123456) { // CondBB
       free(p); // FreeBB

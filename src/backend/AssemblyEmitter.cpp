@@ -84,6 +84,7 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
         }
         if(spOffset[BB.getParent()] != 0) {
             *fout << "  ; Init stack pointer\n";
+            // We shouldn't use sp if ____malloc is defined; stack can conflict
             *fout << (hasNewMalloc ? emitInst({"sp = call ____malloc",to_string(spOffset[BB.getParent()])})
                                    : emitInst({"sp = sub sp",to_string(spOffset[BB.getParent()]),"64"}));
         }
@@ -312,7 +313,8 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
 
 //Terminator insts.
 void AssemblyEmitter::visitReturnInst(ReturnInst& I) {
-    // sp is automatically restored; no need to add
+    // sp is automatically restored when returned; we don't need to add
+    // we just left unnecessary code to avoid possible merge conflict
     /*
     //increase sp(which was decreased in the beginning of the function.)
     Function* F = I.getFunction();

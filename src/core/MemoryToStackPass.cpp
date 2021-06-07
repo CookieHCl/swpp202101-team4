@@ -1,14 +1,11 @@
 #include "MemoryToStackPass.h"
 
-const char* MemoryToStackPass::STACK_POINTER_NAME = "____sp";
-const char* MemoryToStackPass::NEW_MALLOC_NAME = "____malloc";
-const char* MemoryToStackPass::NEW_FREE_NAME = "____free";
-
 // make new function declaration with same type
 #define NEW_FUNC(OldFunc, NewName, M) (!OldFunc ? nullptr : Function::Create( \
     OldFunc->getFunctionType(), Function::ExternalLinkage, NewName, M))
 
-// Code from Backend.cpp. Return sizeof(T) in bytes.
+// return sizeof(T) in bytes.
+// code from Backend.cpp
 static uint64_t getAccessSize(Type *T) {
   if (isa<PointerType>(T))
     return 8;
@@ -20,7 +17,9 @@ static uint64_t getAccessSize(Type *T) {
   llvm_unreachable("Unsupported access size type!");
 }
 
-// stack can conflict; replace alloca with new malloc so nobody use stack
+// stack can conflict; replace alloca with new malloc
+// manually replacing alloca with new malloc is cheaper than sp with ____malloc
+// because we don't need to add/sub to calculate address from sp
 void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc) {
   for (Function &F : M) {
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E;) {
@@ -65,20 +64,20 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   logs() << "---------- Start MemoryToStackPass ----------\n";
 
   Function* OrigMalloc = M.getFunction("malloc");
-  // If we don't have malloc, we don't need to change to stack at all
+  // if we don't have malloc, we don't need to change to stack at all
   if (!OrigMalloc) {
     logs() << "Module doesn't have malloc;\n"
               "---------- End MemoryToStackPass ----------\n";
     return PreservedAnalyses::all();
   }
 
-  // It's normal to not have free; don't check it
+  // it's normal to not have free; don't check it
   Function* OrigFree = M.getFunction("free");
 
   // create new malloc & free
   // actual function definition is in Backend.cpp
-  Function* NewMalloc = NEW_FUNC(OrigMalloc, NEW_MALLOC_NAME, M);
-  Function* NewFree = NEW_FUNC(OrigFree, NEW_FREE_NAME, M);
+  Function* NewMalloc = NEW_FUNC(OrigMalloc, "____malloc", M);
+  Function* NewFree = NEW_FUNC(OrigFree, "____free", M);
 
   // replace original functions
   replaceAlloca(M, NewMalloc);
