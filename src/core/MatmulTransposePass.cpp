@@ -206,11 +206,34 @@ bool MatmulTransposePass::noAdditionalOuterBody(Loop *InnerLoop, Loop *OuterLoop
   return true;
 }
 
+void MatmulTransposePass::updateVectorizableCnt(const SCEV *target, Loop *InnerLoop, Loop *OuterLoop) {
+  SCEVTypes scevType = target->getSCEVType();
+  switch (scevType) {
+    case SCEVTypes::scAddRecExpr: {
+      const SCEVAddRecExpr *addRecSCEV = dyn_cast<SCEVAddRecExpr>(target);
+      if(!addRecSCEV || addRecSCEV->getNumOperands() != 2) return;
+      const SCEVConstant *addv = dyn_cast<SCEVConstant>(addRecSCEV->getOperand(1));
+      if(!addv || !addv->getValue()->isOne()) return;
+      if(addRecSCEV->getLoop() == InnerLoop) vectorizableCntBefore++;
+      if(addRecSCEV->getLoop() == OuterLoop) vectorizableCntAfter++;
+      return;
+    }
+    case SCEVTypes::scTruncate:
+    case SCEVTypes::scZeroExtend:
+    case SCEVTypes::scSignExtend: {
+      const SCEVCastExpr *castSCEV = dyn_cast<SCEVCastExpr>(target);
+      updateVectorizableCnt(castSCEV->getOperand(), InnerLoop, OuterLoop);
+      return;
+    }
+    default: return;
+  }
+}
+
 /* This function is for isThereOnlySigmaStore (CHECK 3.)
  *  Check the target is loop invariant about OuterLoop
  *  or Load Instruction that has loop invariant index and source different from ptrAddr.
  */
-bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loop *OuterLoop, ScalarEvolution &SE) {
+bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE) {
   SCEVTypes scevType = target->getSCEVType();
   switch (scevType) {
     case SCEVTypes::scAddRecExpr:
@@ -224,7 +247,7 @@ bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loo
       const SCEVNAryExpr *narySCEV = dyn_cast<SCEVNAryExpr>(target);
       bool rev = true;
       for (int i = 0; i < narySCEV->getNumOperands(); ++i)
-        rev &= this->isValidtoAdded(narySCEV->getOperand(i), ptrAddr, OuterLoop, SE);
+        rev &= this->isValidtoAdded(narySCEV->getOperand(i), ptrAddr, InnerLoop, OuterLoop, SE);
       return rev;
     }
     case SCEVTypes::scConstant: return true;
@@ -237,7 +260,8 @@ bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loo
         GetElementPtrInst *ptrInst = dyn_cast<GetElementPtrInst>(load->getPointerOperand());
         if(!ptrInst) return false;
         if(ptrInst->getOperand(0) == ptrAddr) return false;
-        return this->isValidtoAdded(SE.getSCEV(ptrInst->getOperand(1)), ptrAddr, OuterLoop, SE);
+        updateVectorizableCnt(SE.getSCEV(ptrInst->getOperand(1)), InnerLoop, OuterLoop);
+        return this->isValidtoAdded(SE.getSCEV(ptrInst->getOperand(1)), ptrAddr, InnerLoop, OuterLoop, SE);
       }
       return false;
     }
@@ -245,7 +269,7 @@ bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loo
     case SCEVTypes::scZeroExtend:
     case SCEVTypes::scSignExtend: {
       const SCEVCastExpr *castSCEV = dyn_cast<SCEVCastExpr>(target);
-      return this->isValidtoAdded(castSCEV->getOperand(), ptrAddr, OuterLoop, SE);
+      return this->isValidtoAdded(castSCEV->getOperand(), ptrAddr, InnerLoop, OuterLoop, SE);
     }
     default: return false;
   }
@@ -256,7 +280,7 @@ bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loo
  *  
  *  Array[(loop Invariant index)] += (loop Invariant value / Load from another array)
  */
-bool MatmulTransposePass::isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE) {
+bool MatmulTransposePass::isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE) {  
   for (BasicBlock *BB : InnerLoop->getBlocks()) {
     for (Instruction &I : *BB) {
       if(dyn_cast<CallInst>(&I)) return false;
@@ -278,9 +302,13 @@ bool MatmulTransposePass::isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop
       GetElementPtrInst *ptrInst = dyn_cast<GetElementPtrInst>(store->getPointerOperand());
       if(!ptrInst) return false;
       
+      // load, store
+      updateVectorizableCnt(SE.getSCEV(ptrInst->getOperand(1)), InnerLoop, OuterLoop);
+      updateVectorizableCnt(SE.getSCEV(ptrInst->getOperand(1)), InnerLoop, OuterLoop);
+      
       Value *v = addInst->getOperand(1);
       const SCEV *value = SE.getSCEV(v);
-      if(!isValidtoAdded(value, ptrInst->getOperand(0), OuterLoop, SE)) return false;
+      if(!isValidtoAdded(value, ptrInst->getOperand(0), InnerLoop, OuterLoop, SE)) return false;
       logs() << "  SCEV += " << *value << "\n";
     }
   }
@@ -365,8 +393,15 @@ bool MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
       //  The store Instruction should have this form below.
       //  
       //  Array[(loop Invariant index)] += (loop Invariant value / Load from another array)
+      vectorizableCntBefore = 0;
+      vectorizableCntAfter = 0;
       if(!isThereOnlySigmaStore(L, Outer, SE)) continue;
+
+      logs() << "  vectorizableCntBefore " << vectorizableCntBefore << "\n";
+      logs() << "  vectorizableCntAfter  " << vectorizableCntAfter << "\n";
       
+      // check profit
+      if(vectorizableCntBefore > vectorizableCntAfter) continue;
 
       // Interchange L and Outer
       InnerToLatchBI->setSuccessor(0, OuterLoopLatch);

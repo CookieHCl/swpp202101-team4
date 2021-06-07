@@ -31,12 +31,16 @@ using namespace std;
 class MatmulTransposePass : public llvm::PassInfoMixin<MatmulTransposePass> {
 private:
   const bool isVerbose;
+
+  int vectorizableCntBefore;
+  int vectorizableCntAfter;
+
   // stream for logging; only prints if verbose
   raw_ostream& logs() const { return isVerbose ? outs() : nulls(); }
 
   PHINode *getCanonicalVariable(Loop *L);
-  bool isValidtoAdded(const SCEV *target, Value *ptrAddr, Loop *OuterLoop, ScalarEvolution &SE);
-
+  void updateVectorizableCnt(const SCEV *target, Loop *InnerLoop, Loop *OuterLoop);
+  bool isValidtoAdded(const SCEV *target, Value *ptrAddr, Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE);
   bool isConstantRange(Loop *L, const SCEV *target, Loop *Outer, ScalarEvolution &SE, bool from);
   bool noAdditionalOuterBody(Loop *InnerLoop, Loop *OuterLoop);
   bool isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE);
