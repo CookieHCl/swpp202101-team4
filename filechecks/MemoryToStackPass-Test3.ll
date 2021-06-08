@@ -4,88 +4,86 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16
 target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: nounwind uwtable
-define dso_local i64* @read_arr(i64 %n) #0 {
-; CHECK: start read_arr 1:
-; CHECK: call ____malloc
-; CHECK: end read_arr
+define dso_local i8* @malloc2(i64 %n) #0 {
 entry:
-  %mul = mul i64 8, %n
-  %call = call noalias i8* @malloc(i64 %mul) #4
-  %0 = bitcast i8* %call to i64*
-  ret i64* %0
+  %call = call noalias i8* @malloc(i64 %n) #3
+  ret i8* %call
 }
 
 ; Function Attrs: nounwind
 declare dso_local noalias i8* @malloc(i64) #1
 
 ; Function Attrs: nounwind uwtable
-define dso_local void @write_arr(i64* %arr, i64 %n) #0 {
+define dso_local i32 @main() #0 {
+; CHECK: start main 0:
+; CHECK: br
+; CHECK-NOT: call ____free
+; CHECK-NOT: call ____free
+; CHECK: br
+; CHECK: call ____free
+; CHECK: call malloc2
+; CHECK-NOT: call ____free
+; CHECK: end main
 entry:
-  br label %for.cond
+  %call = call noalias i8* @malloc(i64 100) #3
+  %call1 = call noalias i8* @malloc(i64 200) #3
+  %tobool = icmp ne i8* %call1, null
+  br i1 %tobool, label %if.then, label %if.end
 
-for.cond:                                         ; preds = %for.inc, %entry
-  %i.0 = phi i32 [ 0, %entry ], [ %inc, %for.inc ]
-  %conv = sext i32 %i.0 to i64
-  %cmp = icmp ult i64 %conv, %n
-  br i1 %cmp, label %for.body, label %for.cond.cleanup
+if.then:                                          ; preds = %entry
+  call void @free(i8* %call) #3
+  call void @free(i8* %call1) #3
+  br label %cleanup
 
-for.cond.cleanup:                                 ; preds = %for.cond
-  br label %for.end
+if.end:                                           ; preds = %entry
+  call void @free(i8* %call) #3
+  %call2 = call i8* @malloc2(i64 300)
+  %tobool3 = icmp ne i8* %call2, null
+  br i1 %tobool3, label %if.then4, label %if.else
 
-for.body:                                         ; preds = %for.cond
-  %idxprom = sext i32 %i.0 to i64
-  %arrayidx = getelementptr inbounds i64, i64* %arr, i64 %idxprom
-  %0 = load i64, i64* %arrayidx, align 8
-  %mul = mul i64 %0, 2
-  call void @write(i64 %mul)
-  br label %for.inc
+if.then4:                                         ; preds = %if.end
+  call void @free(i8* %call2) #3
+  br label %if.end6
 
-for.inc:                                          ; preds = %for.body
-  %inc = add nsw i32 %i.0, 1
-  br label %for.cond, !llvm.loop !2
+if.else:                                          ; preds = %if.end
+  %call5 = call noalias i8* @malloc(i64 400) #3
+  call void @free(i8* %call5) #3
+  br label %if.end6
 
-for.end:                                          ; preds = %for.cond.cleanup
-  ret void
+if.end6:                                          ; preds = %if.else, %if.then4
+  call void @free(i8* %call1) #3
+  br label %cleanup
+
+cleanup:                                          ; preds = %if.end6, %if.then
+  %cleanup.dest.slot.0 = phi i32 [ 1, %if.then ], [ 0, %if.end6 ]
+  switch i32 %cleanup.dest.slot.0, label %unreachable [
+    i32 0, label %cleanup.cont
+    i32 1, label %cleanup.cont
+  ]
+
+cleanup.cont:                                     ; preds = %cleanup, %cleanup
+  ret i32 0
+
+unreachable:                                      ; preds = %cleanup
+  ret i32 0
 }
 
 ; Function Attrs: argmemonly nofree nosync nounwind willreturn
 declare void @llvm.lifetime.start.p0i8(i64 immarg, i8* nocapture) #2
 
-declare dso_local void @write(i64) #3
+; Function Attrs: nounwind
+declare dso_local void @free(i8*) #1
 
 ; Function Attrs: argmemonly nofree nosync nounwind willreturn
 declare void @llvm.lifetime.end.p0i8(i64 immarg, i8* nocapture) #2
 
-; Function Attrs: nounwind uwtable
-define dso_local i32 @main() #0 {
-; CHECK: start main 0:
-; CHECK: call ____free
-; CHECK: end main
-entry:
-  %call = call i64 (...) @read()
-  %call1 = call i64* @read_arr(i64 %call)
-  call void @write_arr(i64* %call1, i64 %call)
-  %0 = bitcast i64* %call1 to i8*
-  call void @free(i8* %0) #4
-  ret i32 0
-}
-
-declare dso_local i64 @read(...) #3
-
-; Function Attrs: nounwind
-declare dso_local void @free(i8*) #1
-
 attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { nounwind "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #2 = { argmemonly nofree nosync nounwind willreturn }
-attributes #3 = { "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #4 = { nounwind }
+attributes #3 = { nounwind }
 
 !llvm.module.flags = !{!0}
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{!"clang version 12.0.1 (https://github.com/llvm/llvm-project.git 4973ce53ca8abfc14233a3d8b3045673e0e8543c)"}
-!2 = distinct !{!2, !3, !4}
-!3 = !{!"llvm.loop.mustprogress"}
-!4 = !{!"llvm.loop.unroll.disable"}

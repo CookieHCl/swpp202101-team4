@@ -13,7 +13,8 @@ define dso_local i32 @main() #0 {
 entry:
   %count = alloca [10 x i64], align 16
   %call = call i64 (...) @read()
-  %call1 = call noalias i8* @malloc(i64 %call) #4
+  %mul = mul i64 8, %call
+  %call1 = call noalias i8* @malloc(i64 %mul) #4
   %0 = bitcast i8* %call1 to i64*
   br label %for.cond
 
