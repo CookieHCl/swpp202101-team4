@@ -60,6 +60,70 @@ void MemoryToStackPass::replaceFunction(Module &M, Function* OrigFun,
   }
 }
 
+// remove unnessary free from main;
+// only remove free when malloc won't appear later
+//
+// algorithm:
+// check functions have malloc to determine call inst
+// then topological sort BBs and iterate only when malloc doesn't appear
+void MemoryToStackPass::removeUnnessaryFree(Module &M, Function* NewMalloc,
+    Function* NewFree) {
+  // store functions with malloc
+  SmallPtrSet<Function*, 4> functionsWithMalloc = {NewMalloc};
+  for (Function &F : M) {
+    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
+      if (auto* CB = dyn_cast<CallBase>(&*I)) {
+        if (CB->getCalledFunction() == NewMalloc) {
+          functionsWithMalloc.insert(&F);
+        }
+      }
+    }
+  }
+
+  // used for topological sort; count successors with possible malloc
+  DenseMap<BasicBlock*, unsigned> mallocSuccessors;
+  std::queue<BasicBlock*> q;
+
+  for (BasicBlock &BB : *(M.getFunction("main"))) {
+    unsigned succSize = succ_size(&BB);
+    if (succSize == 0) {
+      q.push(&BB);
+    } else {
+      mallocSuccessors[&BB] = succ_size(&BB);
+    }
+  }
+
+  while (!q.empty()) {
+    BasicBlock* BB = q.front(); q.pop();
+    bool hasNoMalloc = true;
+
+    // iterate backwards to check malloc doesn't appear after free
+    for (auto I = BB->rbegin(), E = BB->rend(); I != E;) {
+      // increase iterator first to avoid invalidation
+      if (auto* CB = dyn_cast<CallBase>(&*(I++))) {
+        Function* calledFunction = CB->getCalledFunction();
+        if (calledFunction == NewFree) {
+          CB->eraseFromParent();
+        } else if (functionsWithMalloc.contains(calledFunction)) {
+          hasNoMalloc = false;
+          break;
+        }
+      }
+    }
+
+    logs() << BB->getName() << (hasNoMalloc ? " has no" : "has") << " malloc\n";
+
+    // if BB doesn't have malloc, decrese successor count from predecessors
+    if (hasNoMalloc) {
+      for (BasicBlock *Pred : predecessors(BB)) {
+        if (--mallocSuccessors[Pred] == 0) {
+          q.push(Pred);
+        }
+      }
+    }
+  }
+}
+
 PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) {
   logs() << "---------- Start MemoryToStackPass ----------\n";
 
@@ -83,6 +147,9 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   replaceAlloca(M, NewMalloc);
   replaceFunction(M, OrigMalloc, NewMalloc);
   replaceFunction(M, OrigFree, NewFree);
+
+  // remove unnessary free from main
+  removeUnnessaryFree(M, NewMalloc, NewFree);
 
   logs() << "---------- End MemoryToStackPass ----------\n";
   return PreservedAnalyses::none();

@@ -6,6 +6,8 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
+#include <queue>
+
 using namespace llvm;
 
 class MemoryToStackPass : public PassInfoMixin<MemoryToStackPass> {
@@ -18,6 +20,7 @@ private:
 
   void replaceAlloca(Module &M, Function* NewMalloc);
   void replaceFunction(Module &M, Function* OrigFun, Function* NewFun);
+  void removeUnnessaryFree(Module &M, Function* NewMalloc, Function* NewFree);
 
 public:
   MemoryToStackPass(bool isVerbose = false) : isVerbose(isVerbose) {}

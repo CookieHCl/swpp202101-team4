@@ -156,7 +156,7 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
       "  r1 = sub r2 arg1 64 \n"
       "  store 8 r1 102392 0 \n"
       "  ret r1 \n"
-      "end ____malloc\n";
+      "end ____malloc\n\n";
 
   /*
   // pointer is in stack if it's less than 102400,
