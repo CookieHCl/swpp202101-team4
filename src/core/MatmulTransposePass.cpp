@@ -35,11 +35,18 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
 
   for (Loop *L : LI.getLoopsInPreorder()) {
+    PHINode *loop_cond = getCanonicalVariable(L);
+    ICmpInst *icmp;
+    if(!loop_cond) continue;
+    BranchInst *LoopHeaderBI = dyn_cast<BranchInst>(L->getHeader()->getTerminator());
+    if(LoopHeaderBI->isUnconditional() ||
+        !(icmp = dyn_cast<ICmpInst>(LoopHeaderBI->getCondition()))) continue;
+    if(dyn_cast<Constant>(icmp->getOperand(1))) continue;
+
     if (L->isInnermost()) {
       BasicBlock *incomming;    /* Incomming edge */
       BasicBlock *backedge;     /* Back edge */
       if(!L->getIncomingAndBackEdge(incomming, backedge)) continue;
-      PHINode *loop_cond = L->getCanonicalInductionVariable();
 
       for (BasicBlock *BB : L->getBlocks()) {
         for (Instruction &I : *BB) {
@@ -358,7 +365,7 @@ bool MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
       if(!(Outer->contains(OuterLoopHeaderBI->getSuccessor(0)) && L->contains(InnerLoopHeaderBI->getSuccessor(0)))) continue;
 
       bool flag = true;
-      BranchInst *InnerToLatchBI, *OuterToLatchBI;
+      BranchInst *InnerToLatchBI = nullptr, *OuterToLatchBI = nullptr;
       for (BasicBlock *BB : L->getBlocks()) {
         if(BB == InnerLoopHeader) continue;
         BranchInst *br = dyn_cast<BranchInst>(BB->getTerminator());
@@ -371,8 +378,8 @@ bool MatmulTransposePass::loopInterChange(Function &F, FunctionAnalysisManager &
         if(!br || br->getNumSuccessors() != 1) flag = false;
         else if(br->getSuccessor(0) == OuterLoopLatch) OuterToLatchBI = br;
       }
-      if(!flag) continue;
-
+      if(!flag || !InnerToLatchBI || !OuterToLatchBI) continue;
+      
       PHINode *InnerLoopCanVar = getCanonicalVariable(L);
       PHINode *OuterLoopCanVar = getCanonicalVariable(Outer);
       if(!InnerLoopCanVar || !OuterLoopCanVar) continue;
@@ -516,6 +523,7 @@ PreservedAnalyses MatmulTransposePass::run(Function &F, FunctionAnalysisManager 
   // STEP 1. remove %Sum.0 register in matmul1.ll
   //  this step is only for matmul1
   //  Interchange is possible only when %sum.0 is deleted.
+  
   logs() << "rmSumReg!\n";
   isChanged |= this->rmSumRegister(F, FAM);
 

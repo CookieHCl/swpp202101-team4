@@ -98,6 +98,7 @@ int main(int argc, char *argv[]) {
 
   // Init managers
   FunctionPassManager FPM;
+  FunctionPassManager FPM1;
   ModulePassManager MPM;
 
   LoopAnalysisManager LAM;
@@ -118,8 +119,10 @@ int main(int argc, char *argv[]) {
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
 
+  // matmul
+  IFSET(MatmulTranspose, FPM1.addPass(MatmulTransposePass(optPrintProgress)))
+
   // Add IR passes
-  IFSET(MatmulTranspose, FPM.addPass(MatmulTransposePass(optPrintProgress)))
   IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
   IFSET(Arithmetic, FPM.addPass(ArithmeticPass()))
   IFSET(Phierase, FPM.addPass(PhierasePass()))
@@ -131,6 +134,7 @@ int main(int argc, char *argv[]) {
   IFSET(GVN, FPM.addPass(GVN()))
 
   // Execute IR passes
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM1)));
   IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()))
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
