@@ -60,25 +60,22 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
 
     //If entry block, modify SP.
     if(&(BB.getParent()->getEntryBlock()) == &BB) {
-        // if main, init values
-        if (BB.getParent()->getName() == "main") {
-            // init left stack size. left stack size is 102392 instead of 102400
-            // because stack size variable itself is stored at stack
-            if (hasNewMalloc) {
-                *fout << "  store 8 102392 102392 0\n";
-            }
-            //if main, import GV within.
-            //this code should happen only if GV array was in the initial program.
-            //GV values are all lowered into alloca + calls
-            if(BB.getModule()->getGlobalList().size()!=0) {
-                *fout << "  ; Init global variables\n";
-                for(auto& gv : BB.getModule()->globals()) {
-                    //temporarily stores the GV pointer.
-                    unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
-                    *fout << emitInst({"r1 = malloc", to_string(size)});
-                    if(gv.hasInitializer() && !gv.getInitializer()->isZeroValue()) {
-                        *fout << emitInst({"store", to_string(getAccessSize(gv.getValueType())), name(gv.getInitializer()), "r1 0"});
-                    }
+        // init left stack size. left stack size is 102392 instead of 102400
+        // because stack size variable itself is stored at stack
+        if (BB.getParent()->getName() == "main" && hasNewMalloc) {
+            *fout << "  store 8 102392 102392 0\n";
+        }
+        //if main, import GV within.
+        //this code should happen only if GV array was in the initial program.
+        //GV values are all lowered into alloca + calls
+        if(BB.getParent()->getName() == "main" && BB.getModule()->getGlobalList().size()!=0) {
+            *fout << "  ; Init global variables\n";
+            for(auto& gv : BB.getModule()->globals()) {
+                //temporarily stores the GV pointer.
+                unsigned size = (getAccessSize(gv.getValueType()) + 7) / 8 * 8;
+                *fout << emitInst({"r1 = malloc", to_string(size)});
+                if(gv.hasInitializer() && !gv.getInitializer()->isZeroValue()) {
+                    *fout << emitInst({"store", to_string(getAccessSize(gv.getValueType())), name(gv.getInitializer()), "r1 0"});
                 }
             }
         }
