@@ -19,7 +19,7 @@ for benchmark in $2/*/ ; do
     source=`find $benchmark/src -name "*.ll"`
     name=`basename $benchmark`
     echo "$name: Compiling..."
-    bin/sf-compiler $source tmp.s
+    timeout 60s bin/sf-compiler $source tmp.s
 
     for input in `find $benchmark/test -name "input*"` ; do
       output=${input%"input"*}output${input##*"input"}
