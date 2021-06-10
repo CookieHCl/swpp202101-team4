@@ -324,7 +324,7 @@ bool LoopVectorizePass::isStoreBackwardable(Instruction *inst1, Instruction *ins
 // 3) Vectorize
 // 3-1) Reorder instruction. For load, up-reorder and store, down-reorder
 // 3-2) Add function call (vload/vstore) and replace instruction.
-bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &instChain, Loop *L,  ScalarEvolution &SE,
+bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &instChain, ScalarEvolution &SE,
                                               const DataLayout &DL, DominatorTree &DT) {
   const int lenChain = instChain.size();
 
@@ -437,13 +437,13 @@ bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &inst
   return isChanged;
 }
 
-bool LoopVectorizePass::vectorizeMap(LoopVectorizePass::InstChainMap &instChainMap, Loop *L, ScalarEvolution &SE, const DataLayout &DL,  DominatorTree &DT) {
+bool LoopVectorizePass::vectorizeMap(LoopVectorizePass::InstChainMap &instChainMap, ScalarEvolution &SE, const DataLayout &DL,  DominatorTree &DT) {
   bool isChanged = false;
   for (std::pair<ChainID, InstChain> &chainItem : instChainMap) {
     logs() << "[Source] " << *chainItem.first << "\n";
     for (unsigned idx = 0; idx < chainItem.second.size(); ++idx)
       logs() << ((idx < chainItem.second.size() - 1) ? "|- " : "`- ") << *chainItem.second[idx] << "\n";
-    isChanged |= vectorizeInstructions(chainItem.second, L, SE, DL, DT);
+    isChanged |= vectorizeInstructions(chainItem.second, SE, DL, DT);
   }
   return isChanged;
 }
@@ -455,8 +455,8 @@ bool LoopVectorizePass::vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE, Ta
   for (BasicBlock *BB : L->getBlocks()) {
     InstChainMap loadChainMap, storeChainMap;
     std::tie(loadChainMap, storeChainMap) = collectInstructions(BB, TTI);
-    isChanged |= vectorizeMap(loadChainMap, L, SE, DL, DT);
-    isChanged |= vectorizeMap(storeChainMap, L, SE, DL, DT);
+    isChanged |= vectorizeMap(loadChainMap, SE, DL, DT);
+    isChanged |= vectorizeMap(storeChainMap, SE, DL, DT);
   }
 
   return isChanged;
