@@ -1,6 +1,7 @@
 #include "LoopUnrollPass.h"
 
 #define UNROLL_UNIT 8
+#define UNROLL_MINUMUM_UNIT 2
 
 /*
  *                            Loop Unroll Pass
@@ -31,7 +32,8 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
   bool PreserveLCSSA = true;
 
   UnrollLoopOptions ULO;
-  // ULO.count means loop copied count
+  // ULO.count means loop copied count.
+  // By default, this is UNROLL_UNIT(8 in asm) but can be adjusted depending on default loop step.
   ULO.Count = UNROLL_UNIT;
   // TripCount is an upper bound on the number of times the loop header runs.
   // Note that we usually do not know exact trip count.
@@ -46,7 +48,7 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
   // We eventually aim load/store vectorize, so unroll anyway.
   ULO.AllowExpensiveTripCount = true;
 
-  ULO.PreserveCondBr = true;
+  ULO.PreserveCondBr = false;
   ULO.PreserveOnlyFirst = false;
   // We cannot assume minimum executiion count.
   ULO.PeelCount = 0;
@@ -61,6 +63,37 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
       OptimizationRemarkEmitter ORE(&F);
       logs() << "[LoopUnrollPass] try unroll " << *L <<"\n";
       Loop *Remainder = nullptr;
+
+      ULO.Count = UNROLL_UNIT;  // By default
+      const Optional<Loop::LoopBounds> opBound = L->getBounds(SE);
+      if (opBound.hasValue()) {
+        const Loop::LoopBounds bound = opBound.getValue();
+        logs() << "Step Value detected : " << *bound.getStepValue() << "\n";
+        if (ConstantInt *stepInt = dyn_cast<ConstantInt>(bound.getStepValue())) {
+          const APInt Int = stepInt->getUniqueInteger();
+          // Prevent large number and -2^31. We do not need them.
+          if (Int.getActiveBits() >= 32) continue;
+
+          const int stepSize = Int.getSExtValue();
+          logs() << "Step Value is ConstantInt [" << *stepInt << "] which in int " << stepSize << "\n";
+
+          const unsigned absStepSize = stepSize > 0 ? stepSize : (-stepSize);
+
+          // General method for any UNROLL_UNIT
+          for (unsigned i = 1; i <= UNROLL_UNIT; ++i)
+            if (((i * absStepSize) % UNROLL_UNIT) == 0) {
+              ULO.Count = i;
+              break;
+            }
+        }
+      }
+
+      logs() << "Unroll Factor : " << ULO.Count << "\n";
+      if (ULO.Count < UNROLL_MINUMUM_UNIT) {
+        logs() << "Do not vectorize due to unroll factor (" << ULO.Count << " < MinimumUnit(2))";
+        continue;
+      }
+
       LoopUnrollResult result = UnrollLoop(L, ULO, &LI, &SE, &DT, &AC, &TTI, &ORE, PreserveLCSSA, &Remainder);
 
       logs() << "LoopUnrollResult\n";
