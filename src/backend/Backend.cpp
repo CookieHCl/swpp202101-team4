@@ -517,7 +517,8 @@ map<Function*, unsigned> Backend::processAlloca(Module& M, SymbolMap& SM) {
         Memory* stackaddr = new Memory(TM.sp(), acc);
         SM.set(alloca, stackaddr);
         //Update acc
-        acc += getAccessSize(alloca->getAllocatedType());
+        unsigned size = getAccessSize(alloca->getAllocatedType());
+        acc += (size + 7) / 8 * 8;
       }
     }
 
