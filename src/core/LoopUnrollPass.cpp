@@ -65,32 +65,58 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
       Loop *Remainder = nullptr;
 
       ULO.Count = UNROLL_UNIT;  // By default
+
       const Optional<Loop::LoopBounds> opBound = L->getBounds(SE);
+
       if (opBound.hasValue()) {
         const Loop::LoopBounds bound = opBound.getValue();
-        logs() << "Step Value detected : " << *bound.getStepValue() << "\n";
-        if (ConstantInt *stepInt = dyn_cast<ConstantInt>(bound.getStepValue())) {
-          const APInt Int = stepInt->getUniqueInteger();
-          // Prevent large number and -2^31. We do not need them.
-          if (Int.getActiveBits() >= 32) continue;
+        Instruction *stepInst = &bound.getStepInst();
+        Value *stepValue = bound.getStepValue();
 
-          const int stepSize = Int.getSExtValue();
-          logs() << "Step Value is ConstantInt [" << *stepInt << "] which in int " << stepSize << "\n";
+        logs() << "Step inst : " << *stepInst << "\n";
 
-          const unsigned absStepSize = stepSize > 0 ? stepSize : (-stepSize);
-
-          // General method for any UNROLL_UNIT
-          for (unsigned i = 1; i <= UNROLL_UNIT; ++i)
-            if (((i * absStepSize) % UNROLL_UNIT) == 0) {
-              ULO.Count = i;
-              break;
-            }
+        if (!isa<AddOperator>(stepInst)) {
+          logs() << "Step inst is not Add. Do not unroll.\n\n";
+          continue;
         }
+
+        logs() << "Step Value : " << *stepValue << "\n";
+        ConstantInt *stepInt = dyn_cast<ConstantInt>(stepValue);
+
+        if (!stepInt) {
+          logs() << "Do not allow non-constant step value. Do not unroll.\n\n";
+          continue;
+        }
+
+        const APInt Int = stepInt->getUniqueInteger();
+        // Prevent large number and -2^31. We do not need them.
+        if (Int.getActiveBits() > 32) {
+          logs() << "Do not allow too big step. Do not unroll.\n\n";
+          continue;
+        }
+
+        const int stepSize = Int.getSExtValue();
+
+        if (stepSize <= 0) {
+          logs() << "Only support positive step size. Do not unroll.\n\n";
+          continue;
+        }
+
+        logs() << "Step Value is ConstantInt [" << *stepInt << "] which in int " << stepSize << "\n";
+
+        const unsigned absStepSize = stepSize > 0 ? stepSize : (-stepSize);
+
+        // General method for any UNROLL_UNIT
+        for (unsigned i = 1; i <= UNROLL_UNIT; ++i)
+          if (((i * absStepSize) % UNROLL_UNIT) == 0) {
+            ULO.Count = i;
+            break;
+          }
       }
 
       logs() << "Unroll Factor : " << ULO.Count << "\n";
       if (ULO.Count < UNROLL_MINUMUM_UNIT) {
-        logs() << "Do not vectorize due to unroll factor (" << ULO.Count << " < MinimumUnit(2))";
+        logs() << "Do not vectorize due to unroll factor (" << ULO.Count << " < MinimumUnit(2))\nDo not Unroll.\n\n";
         continue;
       }
 
