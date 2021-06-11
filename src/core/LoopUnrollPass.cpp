@@ -153,5 +153,7 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
       logs() << "[LoopUnrollPass] END unroll " << *L << "\n";
     }
 
+  if (isChanged) F.addFnAttr(Attribute::NoInline);
+
   return isChanged ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
