@@ -102,6 +102,11 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
           continue;
         }
 
+        if (stepSize >= UNROLL_UNIT) {
+          logs() << "Step size exceed MAX UNROLL UNIT. Do not unroll.\n\n";
+          continue;
+        }
+
         logs() << "Step Value is ConstantInt [" << *stepInt << "] which in int " << stepSize << "\n";
 
         const unsigned absStepSize = stepSize > 0 ? stepSize : (-stepSize);
@@ -114,12 +119,14 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
           }
       }
 
+      // Unroll for at least 2 (UNROLL_MINIMUM_UNIT)
       logs() << "Unroll Factor : " << ULO.Count << "\n";
       if (ULO.Count < UNROLL_MINUMUM_UNIT) {
         logs() << "Do not vectorize due to unroll factor (" << ULO.Count << " < MinimumUnit(2))\nDo not Unroll.\n\n";
         continue;
       }
 
+      // Execute Loop Unrolling.
       LoopUnrollResult result = UnrollLoop(L, ULO, &LI, &SE, &DT, &AC, &TTI, &ORE, PreserveLCSSA, &Remainder);
 
       logs() << "LoopUnrollResult\n";
