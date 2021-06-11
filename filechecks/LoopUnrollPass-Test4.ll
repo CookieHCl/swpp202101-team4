@@ -1,13 +1,14 @@
-; ModuleID = 'unroll1.c'
-source_filename = "unroll1.c"
+; ModuleID = 'unroll4.c'
+source_filename = "unroll4.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: noinline nounwind optnone uwtable
-define dso_local i32 @basic(i64* %A, i64* %B, i32 %n) #0 {
-; CHECK-COUNT-8: store
-; CHECK-DAG: epil
-; CHECK: store
+define dso_local void @do_not_unroll(i64* %A, i64* %B, i32 %n) #0 {
+; CHECK-COUNT-1: load
+; CHECK-COUNT-1: store
+; CHECK-NOT: load
+; CHECK-NOT: store
 entry:
   %A.addr = alloca i64*, align 8
   %B.addr = alloca i64*, align 8
@@ -40,13 +41,12 @@ for.body:                                         ; preds = %for.cond
 
 for.inc:                                          ; preds = %for.body
   %7 = load i32, i32* %i, align 4
-  %inc = add nsw i32 %7, 1
-  store i32 %inc, i32* %i, align 4
+  %add = add nsw i32 %7, 9
+  store i32 %add, i32* %i, align 4
   br label %for.cond, !llvm.loop !2
 
 for.end:                                          ; preds = %for.cond
-  %8 = load i32, i32* %n.addr, align 4
-  ret i32 %8
+  ret void
 }
 
 attributes #0 = { noinline nounwind optnone uwtable "disable-tail-calls"="false" "frame-pointer"="all" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" "unsafe-fp-math"="false" "use-soft-float"="false" }
