@@ -65,10 +65,14 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
       OPT_ENUM_VAL(MemoryToStack, "Use stack instead of heap"),
-      OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock."),
+      OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
       OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
     ));
+
+static cl::opt<bool> optInvertOptimization(
+    "off", cl::desc("Instead of applying optimizations, exclude selected ones"),
+    cl::cat(optCategory));
 
 #define IFSET(enum, X) if (optOptimizations.isSet(Opts::enum)) { X; }
 
@@ -79,6 +83,9 @@ int main(int argc, char *argv[]) {
   if (!optOptimizationBits) {
     // if optimization is not specified, all optimizations should be enabled
     optOptimizationBits = -1;
+  }
+  if (optInvertOptimization) {
+    optOptimizationBits = ~optOptimizationBits;
   }
 
   //Parse input LLVM IR module
