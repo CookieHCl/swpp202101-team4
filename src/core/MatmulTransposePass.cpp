@@ -36,7 +36,7 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
 
   for (Loop *L : LI.getLoopsInPreorder()) {
     PHINode *loop_cond = getCanonicalVariable(L);
-    ICmpInst *icmp;
+    const ICmpInst *icmp;
     if(!loop_cond) continue;
     BranchInst *LoopHeaderBI = dyn_cast<BranchInst>(L->getHeader()->getTerminator());
     if(LoopHeaderBI->isUnconditional() ||
@@ -82,7 +82,7 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
             if(*u == addInst) continue;  // except addInst
             if((storeInst = dyn_cast<StoreInst>(*u)) != nullptr && storeInst->isSimple() &&
                 (ptrInst = dyn_cast<GetElementPtrInst>(getLoadStorePointerOperand(storeInst))) != nullptr) flag = true;
-            else flag = false;
+            else if(flag){ flag = false; break; }
           }
           if(!flag) continue;
 
@@ -94,8 +94,7 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
           flag = true;
 
           for (int now = 0; now < relPtrInsts.size(); ++now) {
-            for (unsigned i = 0; i < relPtrInsts[now]->getNumOperands(); ++i) {
-              Value *v = relPtrInsts[now]->getOperand(i);
+            for (Value *v : relPtrInsts[now]->operands()) {
               if(!L->isLoopInvariant(v)) flag = false;
               Instruction *I1 = dyn_cast<Instruction>(v);
               if(I1 && I1->getParent() == for_end) {
@@ -107,13 +106,10 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
           }
           
           if(flag && DT.dominates(incomming, for_end)) {
-            // now we can move relPtrInsts into Loop
-            storeInst->removeFromParent();
-            for(int i = 0; i < relPtrInsts.size(); ++i)
-              relPtrInsts[i]->removeFromParent();
-            for(int i = relPtrInsts.size() - 1; i >= 0 ; --i)
-              addInst->getParent()->getInstList().insert(addInst->getIterator(), relPtrInsts[i]);
-            addInst->getParent()->getInstList().insertAfter(addInst->getIterator(), storeInst);
+
+            for(int i = (int)relPtrInsts.size() - 1; i >= 0 ; --i)
+              relPtrInsts[i]->moveBefore(addInst);
+            storeInst->moveAfter(addInst);
 
             // create loadInst before addInst
             LoadInst *load = new LoadInst(ptrInst->getSourceElementType(), ptrInst, Twine(), addInst);
@@ -169,14 +165,14 @@ bool MatmulTransposePass::isConstantRange(Loop *L, const SCEV *target, Loop *Out
     case SCEVTypes::scUMinExpr:
     case SCEVTypes::scSMinExpr:
     case SCEVTypes::scAddExpr: {
-      const SCEVNAryExpr *narySCEV = dyn_cast<SCEVNAryExpr>(target);
+      const SCEVNAryExpr *narySCEV = cast<SCEVNAryExpr>(target);
       bool rev = true;
       for (int i = 0; i < narySCEV->getNumOperands(); ++i)
         rev &= this->isConstantRange(L, narySCEV->getOperand(i), Outer, SE, from);
       return rev;
     }
     case SCEVTypes::scAddRecExpr: {
-      const SCEVAddRecExpr *addRecSCEV = dyn_cast<SCEVAddRecExpr>(target);
+      const SCEVAddRecExpr *addRecSCEV = cast<SCEVAddRecExpr>(target);
       if(from && addRecSCEV->getLoop() != L) return false;
       if(!from && addRecSCEV->getLoop() == L) return false;
       bool rev = true;
@@ -186,13 +182,13 @@ bool MatmulTransposePass::isConstantRange(Loop *L, const SCEV *target, Loop *Out
     }
     case SCEVTypes::scConstant: return true;
     case SCEVTypes::scUnknown:{
-      const SCEVUnknown *valSCEV = dyn_cast<SCEVUnknown>(target);
+      const SCEVUnknown *valSCEV = cast<SCEVUnknown>(target);
       return Outer->isLoopInvariant(valSCEV->getValue());
     }
     case SCEVTypes::scTruncate:
     case SCEVTypes::scZeroExtend:
     case SCEVTypes::scSignExtend: {
-      const SCEVCastExpr *castSCEV = dyn_cast<SCEVCastExpr>(target);
+      const SCEVCastExpr *castSCEV = cast<SCEVCastExpr>(target);
       return this->isConstantRange(L, castSCEV->getOperand(), Outer, SE, from);
     }
     default: return false;
@@ -217,8 +213,8 @@ void MatmulTransposePass::updateVectorizableCnt(const SCEV *target, Loop *InnerL
   SCEVTypes scevType = target->getSCEVType();
   switch (scevType) {
     case SCEVTypes::scAddRecExpr: {
-      const SCEVAddRecExpr *addRecSCEV = dyn_cast<SCEVAddRecExpr>(target);
-      if(!addRecSCEV || addRecSCEV->getNumOperands() != 2) return;
+      const SCEVAddRecExpr *addRecSCEV = cast<SCEVAddRecExpr>(target);
+      if(addRecSCEV->getNumOperands() != 2) return;
       const SCEVConstant *addv = dyn_cast<SCEVConstant>(addRecSCEV->getOperand(1));
       if(!addv || !addv->getValue()->isOne()) return;
       if(addRecSCEV->getLoop() == InnerLoop) vectorizableCntBefore++;
@@ -251,7 +247,7 @@ bool MatmulTransposePass::isValidtoAdded(const SCEV *target, Value *ptrAddr, Loo
     case SCEVTypes::scUMinExpr:
     case SCEVTypes::scSMinExpr:
     case SCEVTypes::scAddExpr: {
-      const SCEVNAryExpr *narySCEV = dyn_cast<SCEVNAryExpr>(target);
+      const SCEVNAryExpr *narySCEV = cast<SCEVNAryExpr>(target);
       bool rev = true;
       for (int i = 0; i < narySCEV->getNumOperands(); ++i)
         rev &= this->isValidtoAdded(narySCEV->getOperand(i), ptrAddr, InnerLoop, OuterLoop, SE);
@@ -292,29 +288,28 @@ bool MatmulTransposePass::isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop
     for (Instruction &I : *BB) {
       if(dyn_cast<CallInst>(&I)) return false;
 
-      StoreInst *store;
+      const StoreInst *store;
       if(!(store = dyn_cast<StoreInst>(&I))) continue;    /* Check for all store Instructions */
       if(!store->isSimple()) return false;
 
       // store value to ptr -> value should be (load ptr) + (something)
       // that means *ptr += something; in C
-      BinaryOperator* addInst = dyn_cast<BinaryOperator>(store->getValueOperand());
+      const BinaryOperator* addInst = dyn_cast<BinaryOperator>(store->getValueOperand());
       if(!addInst || addInst->getOpcode() != Instruction::Add) return false;
 
-      LoadInst *load = dyn_cast<LoadInst>(addInst->getOperand(0));
+      const LoadInst *load = dyn_cast<LoadInst>(addInst->getOperand(0));
       if(!load || !load->isSimple()) return false;
       if(store->getPointerOperand() != load->getPointerOperand()) return false;
 
       // now check (something)
-      GetElementPtrInst *ptrInst = dyn_cast<GetElementPtrInst>(store->getPointerOperand());
+      const GetElementPtrInst *ptrInst = dyn_cast<GetElementPtrInst>(store->getPointerOperand());
       if(!ptrInst) return false;
       
       // load, store
       updateVectorizableCnt(SE.getSCEV(ptrInst->getOperand(1)), InnerLoop, OuterLoop);
       updateVectorizableCnt(SE.getSCEV(ptrInst->getOperand(1)), InnerLoop, OuterLoop);
       
-      Value *v = addInst->getOperand(1);
-      const SCEV *value = SE.getSCEV(v);
+      const SCEV *value = SE.getSCEV(addInst->getOperand(1));
       if(!isValidtoAdded(value, ptrInst->getOperand(0), InnerLoop, OuterLoop, SE)) return false;
       logs() << "  SCEV += " << *value << "\n";
     }
@@ -464,8 +459,7 @@ bool MatmulTransposePass::hoistLoad(Function &F, FunctionAnalysisManager &FAM) {
           bool flag = true;
 
           for (int now = 0; now < relPtrInsts.size(); ++now) {
-            for (unsigned i = 0; i < relPtrInsts[now]->getNumOperands(); ++i) {
-              Value *v = relPtrInsts[now]->getOperand(i);
+            for (Value *v : relPtrInsts[now]->operands()) {
               Instruction *I1 = dyn_cast<Instruction>(v);
               if(I1 && I1->getParent() == BB) {
                 if(I1->hasOneUser()) relPtrInsts.push_back(I1);
@@ -486,21 +480,11 @@ bool MatmulTransposePass::hoistLoad(Function &F, FunctionAnalysisManager &FAM) {
             }
           }
           if(!insertBeforeThis) continue;
-          
-          Instruction *cloned;
-          for(int i = relPtrInsts.size() - 1; i >= 0 ; --i) {
-            cloned = relPtrInsts[i]->clone();
-            cloned->insertBefore(insertBeforeThis);
-            relPtrInsts[i]->replaceAllUsesWith(cloned);
-          }
-          cloned = load->clone();
-          cloned->insertBefore(insertBeforeThis);
-          load->replaceAllUsesWith(cloned);
 
-          // now we can move relPtrInsts into Loop
-          load->eraseFromParent();
-          for(int i = 0; i < relPtrInsts.size(); ++i)
-            relPtrInsts[i]->eraseFromParent();
+          for(int i = (int)relPtrInsts.size() - 1; i >= 0 ; --i) {
+            relPtrInsts[i]->moveBefore(insertBeforeThis);
+          }
+          load->moveBefore(insertBeforeThis);
           
           FAM.invalidate(F, PreservedAnalyses::none());
           logs() << "[@" << F.getName() <<"] Hoisted!!" << "\n";
