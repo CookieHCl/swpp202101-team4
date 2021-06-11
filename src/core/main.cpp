@@ -132,8 +132,10 @@ int main(int argc, char *argv[]) {
   IFSET(GVN, FPM.addPass(GVN()))
 
   // Execute IR passes
-  //IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()))
+  if (optOptimizations.isSet(Opts::FunctionInline) && !optOptimizations.isSet(Opts::LoopUnroll))
+    MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  // IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
   MPM.run(*M, MAM);
 
   // If flag is set, write output as LLVM assembly
