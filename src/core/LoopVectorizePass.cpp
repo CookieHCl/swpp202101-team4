@@ -277,17 +277,14 @@ bool LoopVectorizePass::isLoadForwardable(Instruction *inst1, Instruction *inst2
   if (!isa<LoadInst>(inst1) || !isa<LoadInst>(inst2)) return false;
 
   bool isOneDominate = DT.dominates(inst1, inst2);
-  // -- Inst sequence -->
-  //  ... To ...... From ...
-  // From want to be in right back of To
-  Instruction *instFrom = isOneDominate ? inst2 : inst1;
-  Instruction *instTo = isOneDominate ? inst1 : inst2;
+  if (DT.dominates(inst2, inst1)) std::swap(inst2, inst1);
 
   SmallVector<Instruction*> intervalStore;
-  for (auto P = instTo->getIterator(), E = instFrom->getIterator(); P != E; ++P)
+  for (auto P = inst1->getIterator(), E = inst2->getIterator(); P != E; ++P)
     if (isa<StoreInst>(&*P)) intervalStore.push_back(&*P);
 
-  return !any_of(intervalStore, [&](Instruction *inst){ return this->isReferSameMemory(inst, instFrom, SE); });
+  // for 1 ... stores ... 2, check stores and 2 wheter refer same memory (means load before store)
+  return !any_of(intervalStore, [&](Instruction *inst){ return this->isReferSameMemory(inst, inst2, SE); });
 }
 
 bool LoopVectorizePass::isStoreBackwardable(Instruction *inst1, Instruction *inst2, DominatorTree &DT, ScalarEvolution &SE) {
@@ -307,15 +304,15 @@ bool LoopVectorizePass::isStoreBackwardable(Instruction *inst1, Instruction *ins
   if (inst1->getParent() != inst2->getParent()) return false;
   if (!isa<StoreInst>(inst1) || !isa<StoreInst>(inst2)) return false;
 
-  bool isOneDominate = DT.dominates(inst1, inst2);
-  Instruction *instFrom = isOneDominate ? inst1 : inst2;
-  Instruction *instTo = isOneDominate ? inst2 : inst1;
+  // 1 is dominate. we should make 1 be in front of 2
+  if (DT.dominates(inst2, inst1)) std::swap(inst2, inst1);
 
   SmallVector<Instruction*> intervalLoad;
-  for (auto P = instFrom->getIterator(), E = instTo->getIterator(); P != E; ++P)
+  for (auto P = inst1->getIterator(), E = inst2->getIterator(); P != E; ++P)
     if (isa<LoadInst>(&*P)) intervalLoad.push_back(&*P);
 
-  return !any_of(intervalLoad, [&](Instruction *inst){ return this->isReferSameMemory(inst, instFrom, SE); });
+  // For 1 ... loads ... 2, check loads and 1 wheter refer same memory (means load before store)
+  return !any_of(intervalLoad, [&](Instruction *inst){ return this->isReferSameMemory(inst, inst1, SE); });
 }
 
 // Vectorize Instructions composed with three step
