@@ -115,12 +115,13 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // Add existing IR passes
-  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
 
   // Add IR passes
   IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
   IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
+
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(Arithmetic, FPM.addPass(ArithmeticPass()))
   IFSET(Phierase, FPM.addPass(PhierasePass()))
   IFSET(RemoveUnused, FPM.addPass(RemoveUnusedPass()))
@@ -131,7 +132,7 @@ int main(int argc, char *argv[]) {
   IFSET(GVN, FPM.addPass(GVN()))
 
   // Execute IR passes
-  IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()))
+  //IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()))
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
 
