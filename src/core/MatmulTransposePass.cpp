@@ -49,18 +49,17 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
       if(!L->getIncomingAndBackEdge(incomming, backedge)) continue;
 
       for (BasicBlock *BB : L->getBlocks()) {
-        for (Instruction &I : *BB) {
-          PHINode *phi = dyn_cast<PHINode>(&I);
-          if(!phi || loop_cond == phi) continue;
+        for (PHINode &phi : BB->phis()) {
+          if(loop_cond == &phi) continue;
 
           // check I is %sum.0 in matmul1.ll
-          if(phi->getNumIncomingValues() != 2) continue;
+          if(phi.getNumIncomingValues() != 2) continue;
 
-          Value *v = dyn_cast<Value>(phi);  // %sum.0
-          Value *v0 = phi->getIncomingValue(0);
-          Value *v1 = phi->getIncomingValue(1);
-          BasicBlock *bb0 = phi->getIncomingBlock(0);
-          BasicBlock *bb1 = phi->getIncomingBlock(1);
+          Value *v = dyn_cast<Value>(&phi);  // %sum.0
+          Value *v0 = phi.getIncomingValue(0);
+          Value *v1 = phi.getIncomingValue(1);
+          BasicBlock *bb0 = phi.getIncomingBlock(0);
+          BasicBlock *bb1 = phi.getIncomingBlock(1);
 
           // one is from incomming(initialize) other is from Loop L 
           if(bb1 == incomming) { swap(bb0, bb1); swap(v0, v1); }
@@ -115,7 +114,7 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
             LoadInst *load = new LoadInst(ptrInst->getSourceElementType(), ptrInst, Twine(), addInst);
             addInst->setOperand(0, load);
             storeInst->setOperand(0, addInst);
-            phi->eraseFromParent();
+            phi.eraseFromParent();
 
             FAM.invalidate(F, PreservedAnalyses::none());
             logs() << "[@" << F.getName() <<"] remove sum reg!!" << "\n";
@@ -139,15 +138,14 @@ PHINode *MatmulTransposePass::getCanonicalVariable(Loop *L) {
     return nullptr;
 
   // Loop over all of the PHI nodes, looking for a canonical indvar.
-  for (BasicBlock::iterator I = H->begin(); isa<PHINode>(I); ++I) {
-    PHINode *PN = cast<PHINode>(I);
+  for (auto &PN : H->phis()) {
     if (ConstantInt *CI =
-            dyn_cast<ConstantInt>(PN->getIncomingValueForBlock(Incoming)))
+            dyn_cast<ConstantInt>(PN.getIncomingValueForBlock(Incoming)))
       if (Instruction *Inc =
-              dyn_cast<Instruction>(PN->getIncomingValueForBlock(Backedge)))
-        if (Inc->getOpcode() == Instruction::Add && Inc->getOperand(0) == PN)
+              dyn_cast<Instruction>(PN.getIncomingValueForBlock(Backedge)))
+        if (Inc->getOpcode() == Instruction::Add && Inc->getOperand(0) == &PN)
           if (ConstantInt *CI = dyn_cast<ConstantInt>(Inc->getOperand(1)))
-            return PN;
+            return &PN;
   }
   return nullptr;
 }
