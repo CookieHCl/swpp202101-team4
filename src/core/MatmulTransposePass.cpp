@@ -1,31 +1,6 @@
 #include "MatmulTransposePass.h"
 
 
-/* In order to optimize the loop, its induction need to be a PHInode. (Scalar Evolution)
- */
-bool MatmulTransposePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM) {
-  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
-
-  SmallVector<AllocaInst*, 8> allocaInstVector;
-  bool isChanged = false;
-
-  while (true) {
-    allocaInstVector.clear();
-    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
-      if (AllocaInst *allocaInst = dyn_cast<AllocaInst>(&*I))
-        if (isAllocaPromotable(allocaInst)) allocaInstVector.push_back(allocaInst);
-
-    if (allocaInstVector.empty()) break;
-
-    PromoteMemToReg(allocaInstVector, DT, &AC);
-    isChanged = true;
-  }
-
-  if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
-  return isChanged;
-}
-
 /* STEP 1. remove %Sum.0 register in matmul1.ll
  *  this step is only for matmul1
  *  Interchange is possible only when %sum.0 is deleted.
@@ -129,6 +104,8 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
 
 /* find Canonical Variable
  *  Initialize with constant and added by a constant.
+ * 
+ * reference: https://llvm.org/doxygen/LoopInfo_8cpp_source.html#l00150
  */
 PHINode *MatmulTransposePass::getCanonicalVariable(Loop *L) {
   BasicBlock *H = L->getHeader();
@@ -497,25 +474,22 @@ bool MatmulTransposePass::hoistLoad(Function &F, FunctionAnalysisManager &FAM) {
 
 PreservedAnalyses MatmulTransposePass::run(Function &F, FunctionAnalysisManager &FAM) {
   logs() << "[MatmulTranspose Progress in @" << F.getName() << "]\n";
-  bool isChanged = false;
 
   // In order to optimize the loop, its induction need to be a PHInode. (Scalar Evolution)
-  isChanged |= this->makeAllocaAsPHI(F, FAM);
+  makeAllocaAsPHI(F, FAM);
 
   // STEP 1. remove %Sum.0 register in matmul1.ll
   //  this step is only for matmul1
   //  Interchange is possible only when %sum.0 is deleted.
   
   logs() << "rmSumReg!\n";
-  isChanged |= this->rmSumRegister(F, FAM);
 
   // STEP 2. InterChange Loop if possible
   logs() << "Interchange!\n";
-  isChanged |= this->loopInterChange(F, FAM);
 
   // STEP 3. hoist Load Instructions to OuterLoop when LoopInvariant about InnerLoop
   logs() << "hoistLoad!\n";
-  while(this->hoistLoad(F, FAM)) isChanged = true;
+  while(this->hoistLoad(F, FAM));
 
-  return isChanged ? PreservedAnalyses::none() : PreservedAnalyses::all();
+  return PreservedAnalyses::all();
 }

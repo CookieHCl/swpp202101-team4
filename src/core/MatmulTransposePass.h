@@ -23,6 +23,8 @@
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
+#include "LoopSimplifyUtil.h"
+
 #include <vector>
 
 using namespace llvm;
@@ -46,7 +48,6 @@ private:
   bool isThereOnlySigmaStore(Loop *InnerLoop, Loop *OuterLoop, ScalarEvolution &SE);
 
   bool rmSumRegister(Function &F, FunctionAnalysisManager &FAM);
-  bool makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
   bool loopInterChange(Function &F, FunctionAnalysisManager &FAM);
   bool hoistLoad(Function &F, FunctionAnalysisManager &FAM);
 

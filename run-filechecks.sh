@@ -12,11 +12,11 @@ for i in `find ./filechecks -name "*.ll"` ; do
   opt=${i%Pass*}
   if [ "$opt" = "$i" ]; then
     echo "$i: Test all optimizations..."
-    bin/sf-compiler $i | $1 $i
+    timeout 60s bin/sf-compiler $i | $1 $i
   else
     opt=`basename $opt`
     echo "$i: Test $opt optimization..."
-    bin/sf-compiler --passes=$opt $i | $1 $i
+    timeout 60s bin/sf-compiler --passes=$opt $i | $1 $i
   fi
 done
 
