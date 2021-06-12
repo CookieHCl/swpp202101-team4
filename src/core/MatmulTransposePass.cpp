@@ -104,8 +104,8 @@ bool MatmulTransposePass::rmSumRegister(Function &F, FunctionAnalysisManager &FA
 
 /* find Canonical Variable
  *  Initialize with constant and added by a constant.
- * 
- * reference: https://llvm.org/doxygen/LoopInfo_8cpp_source.html#l00150
+ *
+ * referenced : https://llvm.org/doxygen/LoopInfo_8cpp_source.html#l00150
  */
 PHINode *MatmulTransposePass::getCanonicalVariable(Loop *L) {
   BasicBlock *H = L->getHeader();
@@ -483,13 +483,15 @@ PreservedAnalyses MatmulTransposePass::run(Function &F, FunctionAnalysisManager 
   //  Interchange is possible only when %sum.0 is deleted.
   
   logs() << "rmSumReg!\n";
+  this->rmSumRegister(F, FAM);
 
   // STEP 2. InterChange Loop if possible
   logs() << "Interchange!\n";
+  this->loopInterChange(F, FAM);
 
   // STEP 3. hoist Load Instructions to OuterLoop when LoopInvariant about InnerLoop
   logs() << "hoistLoad!\n";
   while(this->hoistLoad(F, FAM));
 
-  return PreservedAnalyses::all();
+  return PreservedAnalyses::none();
 }
