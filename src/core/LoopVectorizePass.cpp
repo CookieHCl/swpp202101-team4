@@ -11,6 +11,8 @@
  */ 
 
 
+#define ADDRECSCEV_START_INDEX 0
+#define MAX_VECTOR_SIZE 8
 #define LVTWO(x) x, x
 #define DECLARE_VECTOR_FUNCTION(retType, name, argTypeArray, M) \
   Function::Create(FunctionType::get(retType, argTypeArray, false), GlobalValue::ExternalLinkage, Twine(name), &M)\
@@ -141,6 +143,180 @@ void LoopVectorizePass::vectorizeStoreInsts(InstChain &instChain, const int dime
     inst->eraseFromParent();
 }
 
+template<typename Type> int LoopVectorizePass::getSCEVOperandUnmatchedIndex(const Type *scev1, const Type *scev2) {
+  if (scev1->getNumOperands() != scev2->getNumOperands()) return -1;
+  if (scev1->getNoWrapFlags() != scev2->getNoWrapFlags()) return -1;
+
+  int unmatchedIndex = -1;
+  for (int i = 0; i < scev1->getNumOperands(); ++i) {
+    const SCEV *op1 = scev1->getOperand(i);
+    const SCEV *op2 = scev2->getOperand(i);
+    if (op1 == op2) continue;
+
+    if (unmatchedIndex >= 0) return -1;
+
+    unmatchedIndex = i;
+  }
+  return unmatchedIndex;
+}
+
+LoopVectorizePass::ConProperty LoopVectorizePass::measureConsecutiveProperty(const SCEV *scev1, const SCEV *scev2, ScalarEvolution &SE) {
+  SCEVTypes scevType = scev1->getSCEVType();
+
+  if (scevType != scev2->getSCEVType()) return {false, 0};
+
+  if (scev1 == scev2) return {true, 0};
+
+  const SCEV *Delta = SE.getMinusSCEV(scev2, scev1);
+  if (const SCEVConstant *constDelta = dyn_cast<SCEVConstant>(Delta)) {
+    APInt Int = constDelta->getAPInt();
+    return {true, Int.getSExtValue()};
+  }
+
+  switch (scevType) {
+    case SCEVTypes::scAddExpr: {
+      const SCEVAddExpr *addSCEV1 = dyn_cast<SCEVAddExpr>(scev1);
+      const SCEVAddExpr *addSCEV2 = dyn_cast<SCEVAddExpr>(scev2);
+      int unmatched = this->getSCEVOperandUnmatchedIndex(addSCEV1, addSCEV2);
+      if (unmatched < 0) return {false, 0};
+
+      return this->measureConsecutiveProperty(addSCEV1->getOperand(unmatched), addSCEV2->getOperand(unmatched), SE);
+    }
+    case SCEVTypes::scAddRecExpr: {
+      const SCEVAddRecExpr *addRecSCEV1 = dyn_cast<SCEVAddRecExpr>(scev1);
+      const SCEVAddRecExpr *addRecSCEV2 = dyn_cast<SCEVAddRecExpr>(scev2);
+      int unmatched = this->getSCEVOperandUnmatchedIndex(addRecSCEV1, addRecSCEV2);
+      if (unmatched != ADDRECSCEV_START_INDEX) return {false, 0};
+
+      return this->measureConsecutiveProperty(addRecSCEV1->getStart(), addRecSCEV2->getStart(), SE);
+    }
+    case SCEVTypes::scTruncate:
+    case SCEVTypes::scZeroExtend:
+    case SCEVTypes::scSignExtend: {
+      const SCEVIntegralCastExpr *intSCEV1 = dyn_cast<SCEVIntegralCastExpr>(scev1);
+      const SCEVIntegralCastExpr *intSCEV2 = dyn_cast<SCEVIntegralCastExpr>(scev2);
+      return this->measureConsecutiveProperty(intSCEV1->getOperand(), intSCEV2->getOperand(), SE);
+    }
+    case SCEVTypes::scMulExpr: {
+      const SCEVMulExpr *mulSCEV1 = dyn_cast<SCEVMulExpr>(scev1);
+      const SCEVMulExpr *mulSCEV2 = dyn_cast<SCEVMulExpr>(scev2);
+      int unmatched = this->getSCEVOperandUnmatchedIndex(mulSCEV1, mulSCEV2);
+      if (unmatched < 0) return {false, 0};
+
+      unsigned multiplier = 1;
+      for (int i = 0; i < mulSCEV1->getNumOperands(); ++i) {
+        if (i == unmatched) continue;
+
+        if (const SCEVConstant *constSCEV = dyn_cast<SCEVConstant>(mulSCEV1->getOperand(i))) {
+          APInt Int = constSCEV->getAPInt();
+          if (Int.getActiveBits() > 64) return {false, 0};
+          multiplier *= Int.getZExtValue();
+        } else return {false, 0};
+      }
+
+      ConProperty property = this->measureConsecutiveProperty(mulSCEV1->getOperand(unmatched), mulSCEV2->getOperand(unmatched), SE);
+
+      return {property.first, property.second * multiplier};
+    }
+    default: return {false, 0};
+  }
+}
+
+LoopVectorizePass::ConsecutiveScheme::ConsecutiveScheme(Instruction *inst, int sourceID, ScalarEvolution &SE) : sourceID(sourceID), memInst(inst) {
+  this->ptr = getLoadStorePointerOperand(inst);
+  this->scev = SE.getSCEV(this->ptr);
+  this->displ = 0;
+}
+
+vector<LoopVectorizePass::ConScheme> LoopVectorizePass::createSchemes(LoopVectorizePass::InstChain &instChain, ScalarEvolution &SE) {
+  std::vector<ConScheme> schemes;
+  int numChain = instChain.size();
+  for (int i = 0; i < numChain; ++i)
+    schemes.push_back(ConScheme(instChain[i], i, SE));
+
+  // Compare n * (n-1) / 2 times to check consecutivity
+  for (int i = 0; i < numChain; ++i)
+    for (int j = i + 1; j < numChain; ++j) {
+      ConProperty conProperty = measureConsecutiveProperty(schemes[i].scev, schemes[j].scev, SE);
+      if (!conProperty.first) continue;
+
+      const int delta = conProperty.second;
+      schemes[j].setSourceID(schemes[i].sourceID);
+      schemes[j].setDispl(schemes[i].displ + delta);
+    }
+
+  logs() << "Created Schemes\n";
+  for (ConScheme &scheme : schemes)
+    logs() << scheme << "\n";
+
+  return schemes;
+}
+
+bool LoopVectorizePass::isReferSameMemory(Instruction *inst, Instruction *pivot, ScalarEvolution &SE){
+  const SCEV *pivotSCEV = SE.getSCEV(getLoadStorePointerOperand(pivot));
+  const SCEV *targetSCEV = SE.getSCEV(getLoadStorePointerOperand(inst));
+  ConProperty property = this->measureConsecutiveProperty(pivotSCEV, targetSCEV, SE);
+  return property.first && (property.second == 0);
+}
+
+bool LoopVectorizePass::isLoadForwardable(Instruction *inst1, Instruction *inst2, DominatorTree &DT, ScalarEvolution &SE) {
+  // For load chain, we should avoid "Load after Store".
+  // Hence load are up-reordered, first chain element always can be vectorized.
+  // And last chain element is difficult to vectorize
+  // because there is the highest probability that at least one store exists.
+  //   ADD                                                                LOAD
+  //   LOAD    -> This can be vectorized. Just think LOAD goes up. ->     ADD
+  //    ...                                                               ...
+  //   STORE                                                              STORE
+  //
+  //  STORE
+  //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load,
+  //   LOAD      the result will change.
+
+  if (inst1->getParent() != inst2->getParent()) return false;
+  if (!isa<LoadInst>(inst1) || !isa<LoadInst>(inst2)) return false;
+
+  bool isOneDominate = DT.dominates(inst1, inst2);
+  if (DT.dominates(inst2, inst1)) std::swap(inst2, inst1);
+
+  SmallVector<Instruction*> intervalStore;
+  for (auto P = inst1->getIterator(), E = inst2->getIterator(); P != E; ++P)
+    if (isa<StoreInst>(&*P)) intervalStore.push_back(&*P);
+
+  // for 1 ... stores ... 2, check stores and 2 wheter refer same memory (means load before store)
+  // To check is this possible? : 1 2 .... stores ...
+  return !any_of(intervalStore, [&](Instruction *store){ return this->isReferSameMemory(store, inst2, SE); });
+}
+
+bool LoopVectorizePass::isStoreBackwardable(Instruction *inst1, Instruction *inst2, DominatorTree &DT, ScalarEvolution &SE) {
+  // For Store chain, we should avoid "Load after Store".
+  // Hence store are down-reordered, last chain element always can be vectorized.
+  // First chain element is difficult to vectorize
+  // because there is the highest probability that at least one load exists.
+  //  LOAD                                                               LOAD
+  //   ...    -> This can be vectorized. Just think STORE goes down. ->  ...
+  //  STORE                                                              ADD
+  //   ADD                                                              STORE
+  //
+  //  STORE
+  //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load,
+  //   LOAD      the result will change.
+
+  if (inst1->getParent() != inst2->getParent()) return false;
+  if (!isa<StoreInst>(inst1) || !isa<StoreInst>(inst2)) return false;
+
+  // 1 is dominate. we should make 1 be in front of 2
+  if (DT.dominates(inst2, inst1)) std::swap(inst2, inst1);
+
+  SmallVector<Instruction*> intervalLoad;
+  for (auto P = inst1->getIterator(), E = inst2->getIterator(); P != E; ++P)
+    if (isa<LoadInst>(&*P)) intervalLoad.push_back(&*P);
+
+  // For 1 ... loads ... 2, check loads and 1 wheter refer same memory (means load before store)
+  // To check is this possible? : ..... loads .... 1 2
+  return !any_of(intervalLoad, [&](Instruction *load){ return this->isReferSameMemory(inst1, load, SE); });
+}
+
 // Vectorize Instructions composed with three step
 // 1) Check whether the memory access are consecutive.
 // 2) Check whether loop carried dependence exists.
@@ -149,125 +325,114 @@ void LoopVectorizePass::vectorizeStoreInsts(InstChain &instChain, const int dime
 // 3-2) Add function call (vload/vstore) and replace instruction.
 bool LoopVectorizePass::vectorizeInstructions(LoopVectorizePass::InstChain &instChain, ScalarEvolution &SE,
                                               const DataLayout &DL, DominatorTree &DT) {
-  if (instChain.size() < 2) return false;
+  const int lenChain = instChain.size();
+
+  if (lenChain < 2) return false;
 
   bool isChanged = false;
   Value *Ptr = getLoadStorePointerOperand(instChain.front());
   const bool isLoad = isa<LoadInst>(instChain.front());
-  const SCEV *PtrSCEV = SE.getSCEV(Ptr);
+
   unsigned PtrBitWidth = DL.getPointerSizeInBits(0);
   APInt Size(PtrBitWidth, DL.getTypeStoreSize(Ptr->getType()->getPointerElementType()));
-  const int lenChain = instChain.size();
-  logs() << "PtrWidth : " << PtrBitWidth << "\nSize     : " << Size << "\n";
-  logs() << "PtrSCEV  : " << *PtrSCEV << "\nIsLoad   : " << (isLoad ? "true" : "false") << "\n";
+  unsigned ptrSize = Size.getZExtValue();
 
-  // This is very strong condition. Should be weaken later.
-  // This hard condition covers marginal condition. e.g. range(0, 30, 4) is not vectorized.
-  // SCEV manages margin condition, so non-consecutive case are failed.
-  for (int i = 1; i < lenChain; ++i) {
-    const SCEV *PtrSCEVA = SE.getSCEV(getLoadStorePointerOperand(instChain[i]));
-    const SCEV *ConstDelta = SE.getConstant(Size * i);
-    const SCEV *Delta = SE.getMinusSCEV(PtrSCEVA, PtrSCEV);
-    logs() << "PtrSCEVA : " << *PtrSCEVA << " ( Delta : " << *Delta << ")\n";
-    if (Delta != ConstDelta) return isChanged;
-  }
+  std::vector<ConScheme> conSchemes = createSchemes(instChain, SE);
+  std::vector<ConScheme> validSchemes;
+  std::copy_if(conSchemes.begin(), conSchemes.end(), back_inserter(validSchemes), [ptrSize](ConScheme s) { return s.displ % ptrSize == 0; });
+  if (validSchemes.size() <= 1) return false;
 
-  logs() << "[Chain is CONSECUTIVE]\n";
+  SetVector<int> sourceIDs;
+  for (ConScheme scheme : validSchemes)
+    sourceIDs.insert(scheme.sourceID);
 
-  // Max Vectorize unit is 8. Therefore, split in 8.
-  // This is not the best case: 0-6 impossible and 7 possible + 8 possible and 9-15 impossible
-  // Require more elaborate scheduling.
-  for (int i = 0; i < lenChain; i += 8) {
-    const int num = ((i + 8) < lenChain ? (i + 8) : lenChain) - i;
+  for (int sid : sourceIDs) {
+    std::vector<ConScheme> sidSchemes;
+    std::copy_if(validSchemes.begin(), validSchemes.end(), back_inserter(sidSchemes), [sid](ConScheme s) { return s.sourceID == sid; });
+    std::queue<ConScheme> schemeQueue;
+    for (ConScheme &scheme : sidSchemes) schemeQueue.push(scheme);
 
-    if (num < 2) continue;
+    logs() << "SourceID : " << sid << "\n";
+    for (ConScheme &scheme : sidSchemes)
+      logs() << scheme << "\n";
 
-    Instruction *first = instChain[i];
-    Instruction *last = instChain[i + num - 1];
-    InstChain toVectorize;
-    int64_t mask = 0;  // Load mask, but also can be used for store. (e.g. 0101 means vectorize 0th and 2nd element)
-    // The 1-masked location means load location index. e.g. 0001 means 0th element, 0010 means 1st element.
+    while (!schemeQueue.empty()) {
+      // For all iteration, at least one element is popped so must be terminated.
+      ConScheme scheme = schemeQueue.front();
+      schemeQueue.pop();
+      std::vector<ConScheme> toVectorize = {scheme};
 
-    // Detecting loop carried dependence. Note that this is also strong condition, wil be weaken.
-    // Example of Loop Carried Dependence:
-    //   A[i + 1] = A[i];
-    //   A[i + 2] = A[i + 1];  in this case, we cannot vectorize because of sequential memory access pattern.
-    std::vector<std::pair<Instruction*, const SCEV*>> SCEVItems;
-    if (isLoad) {
-      // For load chain, we should avoid "Load after Store".
-      // Hence load are up-reordered, first chain element always can be vectorized.
-      // And last chain element is difficult to vectorize
-      // because there is the highest probability that at least one store exists.
-      //   ADD                                                                LOAD
-      //   LOAD    -> This can be vectorized. Just think LOAD goes up. ->     ADD
-      //    ...                                                               ...
-      //   STORE                                                              STORE
-      //
-      //  STORE
-      //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load,
-      //   LOAD      the result will change.
-      mask |= 1;
-      toVectorize.push_back(instChain[i]);
+      const unsigned queueLen = schemeQueue.size();
+      for (unsigned i = 0; i < queueLen; ++i) {
+        ConScheme toCheck = schemeQueue.front();
+        schemeQueue.pop();
 
-      for (auto P = first->getIterator(), E = last->getIterator(); P != E; ++P)
-        if (StoreInst *storeInst = dyn_cast<StoreInst>(&*P))
-          SCEVItems.push_back(make_pair(&*P, SE.getSCEV(storeInst->getPointerOperand())));
+        if ((toCheck.displ - scheme.displ < MAX_VECTOR_SIZE * ptrSize) &&
+            ((isLoad && isLoadForwardable(scheme.memInst, toCheck.memInst, DT, SE)) ||
+             (!isLoad && isStoreBackwardable(scheme.memInst, toCheck.memInst, DT, SE)))) {
+            toVectorize.push_back(toCheck);
+            continue;
+          }
 
-      // Note that the condition. DT.dominates means pair.first(StoreInst) is preceeding  current load Inst
-      // and the memory access location is same (Scalar Evolution term)
-      for (int j = 1; j < num; ++j) {
-        Instruction *current = instChain[i + j];
-        const SCEV *loadLocation = SE.getSCEV(getLoadStorePointerOperand(current));
-        if (any_of(SCEVItems,
-            [current, loadLocation, &DT, &SE](std::pair<Instruction*, const SCEV*> pair) {
-              return DT.dominates(pair.first, current) && (SE.getMinusSCEV(pair.second, loadLocation)->isZero());
-            })) continue;
-        mask |= (1 << j);
-        toVectorize.push_back(current);
+        schemeQueue.push(toCheck);
       }
-    } else {
-      // For Store chain, we should avoid "Load after Store".
-      // Hence store are down-reordered, last chain element always can be vectorized.
-      // First chain element is difficult to vectorize
-      // because there is the highest probability that at least one load exists.
-      //  LOAD                                                               LOAD
-      //   ...    -> This can be vectorized. Just think STORE goes down. ->  ...
-      //  STORE                                                              ADD
-      //   ADD                                                              STORE
-      //
-      //  STORE
-      //   ...    -> This can not be vectorized. If store move below LOAD and LOAD access same address as load,
-      //   LOAD      the result will change.
-      for (auto P = first->getIterator(), E = last->getIterator(); P != E; ++P)
-        if (LoadInst *loadInst = dyn_cast<LoadInst>(&*P))
-          SCEVItems.push_back(make_pair(&*P, SE.getSCEV(loadInst->getPointerOperand())));
 
-      // Note that the condition. DT.dominates means current store is preceeding pair.first(LoadInst)
-      // and the memory access location is same (Scalar Evolution term)
-      for (int j = 0; j < num - 1; ++j) {
-        Instruction *current = instChain[i + j];
-        const SCEV *storeLocation = SE.getSCEV(getLoadStorePointerOperand(current));
-        if (any_of(SCEVItems,
-            [current, storeLocation, &DT, &SE](std::pair<Instruction*, const SCEV*> pair) {
-              return DT.dominates(current, pair.first) && (SE.getMinusSCEV(pair.second, storeLocation)->isZero());
-            })) continue;
-        mask |= (1 << j);
-        toVectorize.push_back(current);
+      logs() << "To Vectorize\n";
+      for (ConScheme scheme : toVectorize) logs() << scheme << "\n";
+
+      if (toVectorize.size() < 2) continue;
+
+      ConScheme maxDisplScheme = *max_element(toVectorize.begin(), toVectorize.end());
+      ConScheme minDisplScheme = *min_element(toVectorize.begin(), toVectorize.end());
+
+      // This is for only duplicated load/store with no dependence like
+      // %0 = load i64, i64* @checked, align 8
+      // %1 = load i64, i64* @checked, align 8
+      // or
+      // store i64 %1, i64* %add.ptr, align 8
+      // store i64 %2, i64* %add.ptr, align 8
+      // For load, replace all uses with first load.
+      // For store, remove except last store.
+      if (maxDisplScheme.displ == minDisplScheme.displ) {
+        const unsigned duplicatedNum = toVectorize.size();
+        if (isLoad) {
+          Instruction *first = toVectorize.front().memInst;
+          logs() << "First : " << *first << "\n";
+          for (int i = 1; i < duplicatedNum; ++i) {
+            logs() << *toVectorize[i].memInst << "\n";
+            toVectorize[i].memInst->replaceAllUsesWith(first);
+          }
+        } else {
+          for (int i = 0; i < duplicatedNum - 1; ++i)
+            toVectorize[i].memInst->eraseFromParent();
+        }
+        isChanged = true;
+
+        // Do not perform vectorize
+        continue;
       }
-      toVectorize.push_back(instChain[i + num - 1]);
-      mask |= (1 << (num - 1));
+
+      // For now on, there are at least two distinct ConsecutiveScheme
+      const unsigned maxLen = 1 + (maxDisplScheme.displ - minDisplScheme.displ) / ptrSize;
+      const int dimension = 4 * int(maxLen > 4) + 2 * int(maxLen > 2) + int(maxLen > 1) + 1;
+
+      int64_t mask = 0;
+      Instruction *first = minDisplScheme.memInst;
+      InstChain vectorizeChain;
+      for (ConScheme scheme : toVectorize) {
+        vectorizeChain.push_back(scheme.memInst);
+        unsigned index = (scheme.displ - minDisplScheme.displ) / ptrSize;
+        mask |= (1 << index);
+      }
+
+      if (isLoad) vectorizeLoadInsts(vectorizeChain, dimension, mask, minDisplScheme.memInst);
+      else vectorizeStoreInsts(vectorizeChain, dimension, mask, minDisplScheme.memInst);
+
+      isChanged = true;
     }
 
-    const int newNum = toVectorize.size();
-    if (newNum < 2) continue;
-
-    isChanged = true;
-
-    const int dimension = 4 * int(newNum > 4) + 2 * int(newNum > 2) + int(newNum > 1) + 1;
-
-    if (isLoad) vectorizeLoadInsts(toVectorize, dimension, mask, first);
-    else vectorizeStoreInsts(toVectorize, dimension, mask, first);
   }
+
   return isChanged;
 }
 
