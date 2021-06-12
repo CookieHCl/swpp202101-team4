@@ -284,7 +284,8 @@ bool LoopVectorizePass::isLoadForwardable(Instruction *inst1, Instruction *inst2
     if (isa<StoreInst>(&*P)) intervalStore.push_back(&*P);
 
   // for 1 ... stores ... 2, check stores and 2 wheter refer same memory (means load before store)
-  return !any_of(intervalStore, [&](Instruction *inst){ return this->isReferSameMemory(inst, inst2, SE); });
+  // To check is this possible? : 1 2 .... stores ...
+  return !any_of(intervalStore, [&](Instruction *store){ return this->isReferSameMemory(store, inst2, SE); });
 }
 
 bool LoopVectorizePass::isStoreBackwardable(Instruction *inst1, Instruction *inst2, DominatorTree &DT, ScalarEvolution &SE) {
@@ -312,7 +313,8 @@ bool LoopVectorizePass::isStoreBackwardable(Instruction *inst1, Instruction *ins
     if (isa<LoadInst>(&*P)) intervalLoad.push_back(&*P);
 
   // For 1 ... loads ... 2, check loads and 1 wheter refer same memory (means load before store)
-  return !any_of(intervalLoad, [&](Instruction *inst){ return this->isReferSameMemory(inst, inst1, SE); });
+  // To check is this possible? : ..... loads .... 1 2
+  return !any_of(intervalLoad, [&](Instruction *load){ return this->isReferSameMemory(inst1, load, SE); });
 }
 
 // Vectorize Instructions composed with three step
