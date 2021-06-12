@@ -33,6 +33,7 @@
 - `--passes=<value>`를 사용할 경우 지정한 Pass들만 사용할 수 있다.  
   이때 `<value>`는 Pass 이름들을 쉼표로 구분한 형식이다.  
   Pass 이름은 `enum Opts`에서 지정한 이름들이고, `-h`로 볼 수 있다.
+- `--off`를 사용할 경우 지정한 Pass들만 사용하는 대신 지정한 Pass들만 제외한다.
 - 이 외에는 두 개의 옵션 `<input file>`과 `<output file>`을 받는다.  
   이때 `<output file>`을 생략하거나 `-`로 지정하면 stdout으로 출력한다.
 
@@ -131,9 +132,7 @@ Sprint 1, Sprint 2, Sprint 3이 있다.
   - pull request는 모든 conversation을 resolve해야 한다.
 - BENCHMARK_COSTS: main의 코드를 가지고 모든 benchmark를 돌려본 cost들을 저장한다.
   workflow가 자동으로 업데이트 하므로 **compute-benchmarks.py와 results를 제외하고 다른 파일들을 수정하면 안 된다.**  
-  compute-benchmarks.py는 Python 3.7+과 `GitPython`, `pandas` 패키지가 필요하다.
-  실행시 commit message와 함께 results 폴더에 cost들을 업데이트한다. 이때 같은 commit
-  message의 cost는 덮어쓴다.
+  compute-benchmarks.py와 계산된 benchmark cost에 관한 정보는 [#36](https://github.com/CookieHCl/swpp202101-team4/issues/36)을 참고한다.
 - DOCKER: workflow에 사용하는 [docker](https://github.com/CookieHCl/swpp202101-team4/packages/806657)를 주어진 Dockerfile로 build한다.  
   **컴파일러와 관계없기 때문에 main과 공통 commit이 없다.**  
   [주어진 docker](https://hub.docker.com/r/sunghwanlee/swpp202101-ci)에
