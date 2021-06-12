@@ -12,7 +12,7 @@
 #include "PhierasePass.h"
 #include "RemoveUnusedPass.h"
 
-
+#include "LoopUnrollPass.h"
 #include "LoopVectorizePass.h"
 
 #endif
