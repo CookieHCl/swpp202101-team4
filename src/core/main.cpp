@@ -47,6 +47,7 @@ enum class Opts {
   GVN,
   LoopUnroll,
   LoopVectorize,
+  MemoryToStack,
   Phierase,
   RemoveUnused,
   SCCP,
@@ -66,6 +67,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
       OPT_ENUM_VAL(LoopUnroll, "Unroll for loop"),
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
+      OPT_ENUM_VAL(MemoryToStack, "Use stack instead of heap"),
       OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
       OPT_ENUM_VAL(SCCP, "Sparse Conditinal Constant Propagation"),
@@ -147,6 +149,7 @@ int main(int argc, char *argv[]) {
     MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   // IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
+  IFSET(MemoryToStack, MPM.addPass(MemoryToStackPass(optPrintProgress)))
   MPM.run(*M, MAM);
 
   // If flag is set, write output as LLVM assembly

@@ -123,8 +123,11 @@ class AssemblyEmitter : public InstVisitor<AssemblyEmitter> {
   //updates the bandwidth and returns the value.
   string stringBandWidth(Value*);
 
+  // if ____malloc is defined, we shouldn't use sp
+  bool hasNewMalloc;
+
 public:
-  AssemblyEmitter(raw_ostream *fout, TargetMachine& TM, SymbolMap& SM, map<Function*, unsigned>& spOffset);
+  AssemblyEmitter(raw_ostream *fout, TargetMachine& TM, SymbolMap& SM, map<Function*, unsigned>& spOffset, bool hasNewMalloc);
 
   //Visit functions; should statically override.
   void visitFunction(Function&);
