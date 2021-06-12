@@ -109,11 +109,9 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
 
         logs() << "Step Value is ConstantInt [" << *stepInt << "] which in int " << stepSize << "\n";
 
-        const unsigned absStepSize = stepSize > 0 ? stepSize : (-stepSize);
-
         // General method for any UNROLL_UNIT
         for (unsigned i = 1; i <= UNROLL_UNIT; ++i)
-          if (((i * absStepSize) % UNROLL_UNIT) == 0) {
+          if (((i * unsigned(stepSize)) % UNROLL_UNIT) == 0) {
             ULO.Count = i;
             break;
           }
