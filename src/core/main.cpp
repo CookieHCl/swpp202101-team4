@@ -51,6 +51,7 @@ enum class Opts {
   MatmulTranspose,
   Phierase,
   RemoveUnused,
+  SCCP,
   SimplifyCFG,
 };
 
@@ -71,6 +72,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(MatmulTranspose, "LoopInterchange for more effective vectorize"),
       OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
+      OPT_ENUM_VAL(SCCP, "Sparse Conditinal Constant Propagation"),
       OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
     ));
 
@@ -130,6 +132,7 @@ int main(int argc, char *argv[]) {
 
   // Add existing IR passes
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // Add IR passes
   IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
@@ -145,6 +148,7 @@ int main(int argc, char *argv[]) {
   // Add existing IR passes
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(llvm::GVN()))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
