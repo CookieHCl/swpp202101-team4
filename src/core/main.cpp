@@ -45,10 +45,12 @@ enum class Opts {
   BranchPredict,
   FunctionInline,
   GVN,
+  LoopUnroll,
   LoopVectorize,
   MemoryToStack,
   Phierase,
   RemoveUnused,
+  SCCP,
   SimplifyCFG,
 };
 
@@ -63,10 +65,12 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(BranchPredict, "Set most used branch to false branch"),
       OPT_ENUM_VAL(FunctionInline, "Inline functions if possible"),
       OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
+      OPT_ENUM_VAL(LoopUnroll, "Unroll for loop"),
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
       OPT_ENUM_VAL(MemoryToStack, "Use stack instead of heap"),
       OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
+      OPT_ENUM_VAL(SCCP, "Sparse Conditinal Constant Propagation"),
       OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
     ));
 
@@ -122,11 +126,14 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // Add existing IR passes
-  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // Add IR passes
+  IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
   IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
+
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(Arithmetic, FPM.addPass(ArithmeticPass()))
   IFSET(Phierase, FPM.addPass(PhierasePass()))
   IFSET(RemoveUnused, FPM.addPass(RemoveUnusedPass()))
@@ -135,10 +142,13 @@ int main(int argc, char *argv[]) {
   // Add existing IR passes
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN()))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // Execute IR passes
-  IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()))
+  if (optOptimizations.isSet(Opts::FunctionInline) && !optOptimizations.isSet(Opts::LoopUnroll))
+    MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  // IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
   IFSET(MemoryToStack, MPM.addPass(MemoryToStackPass(optPrintProgress)))
   MPM.run(*M, MAM);
 
