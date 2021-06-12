@@ -9,21 +9,43 @@
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 #include <vector>
+#include <queue>
 
 using namespace llvm;
 using namespace std;
 
 
 class LoopVectorizePass : public llvm::PassInfoMixin<LoopVectorizePass> {
+public:
+  class ConsecutiveScheme {
+  public:
+    int sourceID;
+    const SCEV *scev;
+    Instruction *memInst;
+    Value *ptr;
+    int displ;
+    void setSourceID(int sourceID) { this->sourceID = sourceID; }
+    void setDispl(int displ) { this->displ = displ; }
+    bool operator < (const ConsecutiveScheme &scheme) const {
+      return (sourceID < scheme.sourceID )? true : ((sourceID == scheme.sourceID) ? (displ < scheme.displ) : false);
+    }
+    friend raw_ostream& operator << (raw_ostream& os, const ConsecutiveScheme &scheme) {
+      return os << "[" << *scheme.scev << "](" << scheme.ptr->getName() << ") source " << scheme.sourceID << " displ " << scheme.displ;
+    }
+    ConsecutiveScheme(Instruction *inst, int sourceID, ScalarEvolution &SE);
+  };
   using ChainID = const Value*;
   using InstChain = SmallVector<Instruction*, 8>;
   using InstChainMap = MapVector<ChainID, InstChain>;
+  using ConScheme = ConsecutiveScheme;
+  using ConProperty = pair<bool, int64_t>;
 private:
   bool isVerbose;
   raw_ostream& logs() const { return isVerbose ? outs() : nulls(); }
@@ -35,10 +57,15 @@ private:
     EXTRACT = 1,
     STORE = 2
   };
-
+  bool isReferSameMemory(Instruction *inst, Instruction *pivot, ScalarEvolution &SE);
+  bool isLoadForwardable(Instruction *inst1, Instruction *inst2, DominatorTree &DT, ScalarEvolution &SE);
+  bool isStoreBackwardable(Instruction *inst1, Instruction *inst2, DominatorTree &DT, ScalarEvolution &SE);
+  std::vector<ConsecutiveScheme> createSchemes(InstChain &instChain, ScalarEvolution &SE);
+  ConProperty measureConsecutiveProperty(const SCEV *scev1, const SCEV *scev2, ScalarEvolution &SE);
   ChainID getChainID(const Value *Ptr);
   std::pair<InstChainMap, InstChainMap> collectInstructions(BasicBlock *BB, TargetTransformInfo &TTI);
   Function* getVectorCallee(int dimension, LoopVectorizePass::CalleeType calleeType);
+  template<typename Type> int getSCEVOperandUnmatchedIndex(const Type *scev1, const Type *scev2);
   void fillVectorArgument(Value *address, const int64_t mask, SmallVector<Value*, 8> &Args);
   void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
   bool vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE, TargetTransformInfo &TTI, const DataLayout &DL, DominatorTree &DT);
