@@ -6,6 +6,7 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: nounwind uwtable
 define dso_local i32 @getans3(i32 %x, i32 %y) #0 {
 ; CHECK: start getans3 2:
+; CHECK: icmp
 entry:
   %add = add nsw i32 %x, 10
   %add1 = add nsw i32 %x, 10

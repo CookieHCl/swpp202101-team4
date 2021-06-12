@@ -1,18 +1,27 @@
 ; ModuleID = '/tmp/a.ll'
-source_filename = "/home/psjlds/swpp202101-team4/filechecks/SccpPass-Test1.c"
+source_filename = "/home/psjlds/swpp202101-team4/filechecks/SccpPass-Test2.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: nounwind uwtable
-define dso_local i32 @getans(i32 %x) #0 {
-; CHECK: start getans 1:
-; CHECK-NOT: %mul
+define dso_local i32 @getans2(i32 %x) #0 {
+; CHECK: start getans2 1:
+; CHECK: ret 10
 entry:
-  %mul = mul nsw i32 10, 5
-  %add = add nsw i32 %x, %mul
-  ret i32 %add
+  %cmp = icmp sgt i32 10, 5
+  br i1 %cmp, label %if.then, label %if.else
+
+if.then:                                          ; preds = %entry
+  br label %cleanup
+
+if.else:                                          ; preds = %entry
+  br label %cleanup
+
+cleanup:                                          ; preds = %if.else, %if.then
+  %retval.0 = phi i32 [ 10, %if.then ], [ %x, %if.else ]
+  ret i32 %retval.0
 }
-; CHECK: end getans
+; CHECK: end getans2
 
 ; Function Attrs: argmemonly nofree nosync nounwind willreturn
 declare void @llvm.lifetime.start.p0i8(i64 immarg, i8* nocapture) #1
@@ -24,7 +33,7 @@ declare void @llvm.lifetime.end.p0i8(i64 immarg, i8* nocapture) #1
 define dso_local i32 @main() #0 {
 ; CHECK: start main 0:
 entry:
-  %call = call i32 @getans(i32 10)
+  %call = call i32 @getans2(i32 10)
   ret i32 0
 }
 ; CHECK: end main
