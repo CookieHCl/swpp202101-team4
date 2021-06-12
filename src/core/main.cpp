@@ -49,6 +49,7 @@ enum class Opts {
   LoopVectorize,
   Phierase,
   RemoveUnused,
+  SCCP,
   SimplifyCFG,
 };
 
@@ -67,6 +68,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
       OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
+      OPT_ENUM_VAL(SCCP, "Sparse Conditinal Constant Propagation"),
       OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
     ));
 
@@ -123,6 +125,7 @@ int main(int argc, char *argv[]) {
 
   // Add existing IR passes
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // Add IR passes
   IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
@@ -137,6 +140,7 @@ int main(int argc, char *argv[]) {
   // Add existing IR passes
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN()))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // Execute IR passes
   if (optOptimizations.isSet(Opts::FunctionInline) && !optOptimizations.isSet(Opts::LoopUnroll))
