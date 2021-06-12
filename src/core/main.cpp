@@ -47,6 +47,7 @@ enum class Opts {
   GVN,
   LoopUnroll,
   LoopVectorize,
+  MatmulTranspose,
   MemoryToStack,
   Phierase,
   RemoveUnused,
@@ -67,6 +68,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
       OPT_ENUM_VAL(LoopUnroll, "Unroll for loop"),
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
+      OPT_ENUM_VAL(MatmulTranspose, "LoopInterchange for more effective vectorize"),
       OPT_ENUM_VAL(MemoryToStack, "Use stack instead of heap"),
       OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
@@ -109,6 +111,7 @@ int main(int argc, char *argv[]) {
 
   // Init managers
   FunctionPassManager FPM;
+  FunctionPassManager FPM1;
   ModulePassManager MPM;
 
   LoopAnalysisManager LAM;
@@ -129,6 +132,9 @@ int main(int argc, char *argv[]) {
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
   IFSET(SCCP, FPM.addPass(SCCPPass()))
 
+  // matmul
+  IFSET(MatmulTranspose, FPM1.addPass(MatmulTransposePass(optPrintProgress)))
+
   // Add IR passes
   IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
   IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
@@ -145,6 +151,7 @@ int main(int argc, char *argv[]) {
   IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // Execute IR passes
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM1)));
   if (optOptimizations.isSet(Opts::FunctionInline) && !optOptimizations.isSet(Opts::LoopUnroll))
     MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
