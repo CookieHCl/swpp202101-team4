@@ -48,8 +48,10 @@ enum class Opts {
   LoopUnroll,
   LoopVectorize,
   MatmulTranspose,
+  MemoryToStack,
   Phierase,
   RemoveUnused,
+  SCCP,
   SimplifyCFG,
 };
 
@@ -67,8 +69,10 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(LoopUnroll, "Unroll for loop"),
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
       OPT_ENUM_VAL(MatmulTranspose, "LoopInterchange for more effective vectorize"),
+      OPT_ENUM_VAL(MemoryToStack, "Use stack instead of heap"),
       OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
+      OPT_ENUM_VAL(SCCP, "Sparse Conditinal Constant Propagation"),
       OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
     ));
 
@@ -126,6 +130,7 @@ int main(int argc, char *argv[]) {
 
   // Add existing IR passes
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // matmul
   IFSET(MatmulTranspose, FPM1.addPass(MatmulTransposePass(optPrintProgress)))
@@ -143,6 +148,7 @@ int main(int argc, char *argv[]) {
   // Add existing IR passes
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN()))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // Execute IR passes
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM1)));
@@ -150,6 +156,7 @@ int main(int argc, char *argv[]) {
     MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   // IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
+  IFSET(MemoryToStack, MPM.addPass(MemoryToStackPass(optPrintProgress)))
   MPM.run(*M, MAM);
 
   // If flag is set, write output as LLVM assembly
