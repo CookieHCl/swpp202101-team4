@@ -45,6 +45,7 @@ enum class Opts {
   BranchPredict,
   FunctionInline,
   GVN,
+  LoopUnroll,
   LoopVectorize,
   Phierase,
   RemoveUnused,
@@ -62,11 +63,16 @@ static cl::bits<Opts, unsigned> optOptimizations(
       OPT_ENUM_VAL(BranchPredict, "Set most used branch to false branch"),
       OPT_ENUM_VAL(FunctionInline, "Inline functions if possible"),
       OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
+      OPT_ENUM_VAL(LoopUnroll, "Unroll for loop"),
       OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
-      OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock."),
+      OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
       OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
       OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
     ));
+
+static cl::opt<bool> optInvertOptimization(
+    "off", cl::desc("Instead of applying optimizations, exclude selected ones"),
+    cl::cat(optCategory));
 
 #define IFSET(enum, X) if (optOptimizations.isSet(Opts::enum)) { X; }
 
@@ -77,6 +83,9 @@ int main(int argc, char *argv[]) {
   if (!optOptimizationBits) {
     // if optimization is not specified, all optimizations should be enabled
     optOptimizationBits = -1;
+  }
+  if (optInvertOptimization) {
+    optOptimizationBits = ~optOptimizationBits;
   }
 
   //Parse input LLVM IR module
@@ -113,11 +122,13 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // Add existing IR passes
-  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
 
   // Add IR passes
+  IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
   IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
+
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(Arithmetic, FPM.addPass(ArithmeticPass()))
   IFSET(Phierase, FPM.addPass(PhierasePass()))
   IFSET(RemoveUnused, FPM.addPass(RemoveUnusedPass()))
@@ -128,8 +139,10 @@ int main(int argc, char *argv[]) {
   IFSET(GVN, FPM.addPass(GVN()))
 
   // Execute IR passes
-  IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()))
+  if (optOptimizations.isSet(Opts::FunctionInline) && !optOptimizations.isSet(Opts::LoopUnroll))
+    MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  // IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
   MPM.run(*M, MAM);
 
   // If flag is set, write output as LLVM assembly
