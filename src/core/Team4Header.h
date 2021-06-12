@@ -11,10 +11,11 @@
 #include "BranchPredictPass.h"
 #include "ConstantMergePass.h"
 #include "FunctionInlinePass.h"
-#include "PhierasePass.h"
-#include "RemoveUnusedPass.h"
 #include "LoopUnrollPass.h"
 #include "LoopVectorizePass.h"
 #include "MatmulTransposePass.h"
+#include "MemoryToStackPass.h"
+#include "PhierasePass.h"
+#include "RemoveUnusedPass.h"
 
 #endif
