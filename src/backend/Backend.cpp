@@ -124,63 +124,67 @@ PreservedAnalyses Backend::run(Module &M, ModuleAnalysisManager &MAM) {
     exit(1);
   }
 
+  bool hasNewMalloc = (M.getFunction("____malloc") != nullptr);
+
   AssemblyEmitter Emitter(os, TM, symbolMap, spOffsetMap,
-    M.getFunction("____malloc") != nullptr);
+    hasNewMalloc);
   for(Function& F : M){
     if(F.isDeclaration()) continue;
     Emitter.visit(F);
     *os << "end " << symbolMap.get(&F)->getName() << "\n\n";
   }
 
-  /*
-  // 102392 stores left stack size and is initialized with 102392;
-  // see AssemblyEmitter.cpp
-  ____malloc(size) {
-    if (size > *102392) { // CondBB
-      return malloc(size); // MallocBB
+  if (hasNewMalloc) {
+    /*
+    // 102392 stores left stack size and is initialized with 102392;
+    // see AssemblyEmitter.cpp
+    ____malloc(size) {
+      if (size > *102392) { // CondBB
+        return malloc(size); // MallocBB
+      }
+      else {
+        return (*102392 -= size); // StackBB
+      }
     }
-    else {
-      return (*102392 -= size); // StackBB
-    }
-  }
-  */
-  *os << "start ____malloc 1:\n"
-      ".CondBB:\n"
-      "  r2 = load 8 102392 0 \n"
-      "  r1 = icmp ugt arg1 r2 64 \n"
-      "  br r1 .MallocBB .StackBB \n"
-      ".MallocBB:\n"
-      "  r1 = malloc arg1 \n"
-      "  ret r1 \n"
-      ".StackBB:\n"
-      "  r1 = sub r2 arg1 64 \n"
-      "  store 8 r1 102392 0 \n"
-      "  ret r1 \n"
-      "end ____malloc\n\n";
+    */
+    *os << "start ____malloc 1:\n"
+        ".CondBB:\n"
+        "  r2 = load 8 102392 0 \n"
+        "  r1 = icmp ugt arg1 r2 64 \n"
+        "  br r1 .MallocBB .StackBB \n"
+        ".MallocBB:\n"
+        "  r1 = malloc arg1 \n"
+        "  ret r1 \n"
+        ".StackBB:\n"
+        "  r1 = sub r2 arg1 64 \n"
+        "  store 8 r1 102392 0 \n"
+        "  ret r1 \n"
+        "end ____malloc\n\n";
 
-  /*
-  // pointer is in stack if it's less than 102400,
-  // and pointer is in heap if it's greater than or equal to 204800.
-  // so use any value in middle to determine if pointer is in heap
-  ____free(p) {
-    if (p > 123456) { // CondBB
-      free(p); // FreeBB
+    /*
+    // pointer is in stack if it's less than 102400,
+    // and pointer is in heap if it's greater than or equal to 204800.
+    // so use any value in middle to determine if pointer is in heap
+    ____free(p) {
+      if (p > 123456) { // CondBB
+        free(p); // FreeBB
+      }
+      else {
+        return; // VoidBB
+      }
     }
-    else {
-      return; // VoidBB
-    }
+    */
+    *os << "start ____free 1:\n"
+        ".CondBB:\n"
+        "  r1 = icmp ugt arg1 123456 64 \n"
+        "  br r1 .FreeBB .VoidBB \n"
+        ".FreeBB:\n"
+        "  free arg1 \n"
+        "  ret \n"
+        ".VoidBB:\n"
+        "  ret \n"
+        "end ____free\n";
   }
-  */
-  *os << "start ____free 1:\n"
-      ".CondBB:\n"
-      "  r1 = icmp ugt arg1 123456 64 \n"
-      "  br r1 .FreeBB .VoidBB \n"
-      ".FreeBB:\n"
-      "  free arg1 \n"
-      "  ret \n"
-      ".VoidBB:\n"
-      "  ret \n"
-      "end ____free\n";
 
   if (os != &outs()) delete os;
   
