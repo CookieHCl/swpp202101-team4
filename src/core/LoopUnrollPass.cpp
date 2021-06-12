@@ -148,10 +148,8 @@ PreservedAnalyses LoopUnrollPass::run(Function &F, FunctionAnalysisManager &FAM)
         bool isMerged = false;
         vector<BasicBlock*> BBs = L->getBlocksVector();
 
-        for (BasicBlock *BB : BBs) {
-          if (isa<BranchInst>(BB->getTerminator()))
-            isMerged |= MergeBlockIntoPredecessor(BB, &DTU, &LI);
-        }
+        for (BasicBlock *BB : BBs)
+          isMerged |= MergeBlockIntoPredecessor(BB, &DTU, &LI);
 
         // If cannot merge new blocks, terminate.
         if (!isMerged) break;
