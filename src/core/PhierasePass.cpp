@@ -45,6 +45,7 @@ PreservedAnalyses PhierasePass::run(Function &F, FunctionAnalysisManager &FAM){
             if(Cur_pre_BB == pre_BB){
               Value *CurVal = Phi->getOperand(i);
               ReplaceInstWithValue(Cloned_BB->getInstList(), tmp_itr, CurVal); //replace original instruction to modfied value.
+              break;
             }
           }
         } else {//else replace operands to new value
