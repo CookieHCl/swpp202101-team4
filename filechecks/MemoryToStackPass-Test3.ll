@@ -16,8 +16,8 @@ declare dso_local noalias i8* @malloc(i64) #1
 ; Function Attrs: nounwind uwtable
 define dso_local i32 @main() #0 {
 ; CHECK: start main 0:
-; CHECK: br
 ; CHECK-NOT: call ____free
+; CHECK: br
 ; CHECK-NOT: call ____free
 ; CHECK: br
 ; CHECK: call ____free

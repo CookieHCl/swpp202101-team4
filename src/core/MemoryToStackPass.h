@@ -18,9 +18,11 @@ private:
     return isVerbose ? outs() : nulls();
   }
 
+  using ConstFP = const Function* const;
+
   void replaceAlloca(Module &M, Function* NewMalloc);
-  void replaceFunction(Module &M, Function* OrigFun, Function* NewFun);
-  void removeUnnessaryFree(Module &M, Function* NewMalloc, Function* NewFree);
+  void replaceFunction(Module &M, ConstFP OrigFun, Function* NewFun);
+  void removeUnnessaryFree(Module &M, ConstFP NewMalloc, ConstFP NewFree);
 
 public:
   MemoryToStackPass(bool isVerbose = false) : isVerbose(isVerbose) {}

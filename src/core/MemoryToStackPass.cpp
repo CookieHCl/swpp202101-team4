@@ -47,7 +47,7 @@ void MemoryToStackPass::replaceAlloca(Module &M, Function* NewMalloc) {
 }
 
 // replace all calls calling OrigFun except those inside NewFun
-void MemoryToStackPass::replaceFunction(Module &M, Function* OrigFun,
+void MemoryToStackPass::replaceFunction(Module &M, ConstFP OrigFun,
     Function* NewFun) {
   for (Function &F : M) {
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
@@ -66,15 +66,16 @@ void MemoryToStackPass::replaceFunction(Module &M, Function* OrigFun,
 // algorithm:
 // check functions have malloc to determine call inst
 // then topological sort BBs and iterate only when malloc doesn't appear
-void MemoryToStackPass::removeUnnessaryFree(Module &M, Function* NewMalloc,
-    Function* NewFree) {
+void MemoryToStackPass::removeUnnessaryFree(Module &M, ConstFP NewMalloc,
+    ConstFP NewFree) {
   // store functions with malloc
-  SmallPtrSet<Function*, 4> functionsWithMalloc = {NewMalloc};
+  SmallPtrSet<ConstFP, 4> functionsWithMalloc = {NewMalloc};
   for (Function &F : M) {
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
       if (auto* CB = dyn_cast<CallBase>(&*I)) {
         if (CB->getCalledFunction() == NewMalloc) {
           functionsWithMalloc.insert(&F);
+          break;
         }
       }
     }
@@ -101,7 +102,7 @@ void MemoryToStackPass::removeUnnessaryFree(Module &M, Function* NewMalloc,
     for (auto I = BB->rbegin(), E = BB->rend(); I != E;) {
       // increase iterator first to avoid invalidation
       if (auto* CB = dyn_cast<CallBase>(&*(I++))) {
-        Function* calledFunction = CB->getCalledFunction();
+        ConstFP calledFunction = CB->getCalledFunction();
         if (calledFunction == NewFree) {
           CB->eraseFromParent();
         } else if (functionsWithMalloc.contains(calledFunction)) {
@@ -127,7 +128,7 @@ void MemoryToStackPass::removeUnnessaryFree(Module &M, Function* NewMalloc,
 PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) {
   logs() << "---------- Start MemoryToStackPass ----------\n";
 
-  Function* OrigMalloc = M.getFunction("malloc");
+  ConstFP OrigMalloc = M.getFunction("malloc");
   // if we don't have malloc, we don't need to change to stack at all
   if (!OrigMalloc) {
     logs() << "Module doesn't have malloc;\n"
@@ -136,10 +137,11 @@ PreservedAnalyses MemoryToStackPass::run(Module &M, ModuleAnalysisManager &MAM) 
   }
 
   // it's normal to not have free; don't check it
-  Function* OrigFree = M.getFunction("free");
+  ConstFP OrigFree = M.getFunction("free");
 
   // create new malloc & free
   // actual function definition is in Backend.cpp
+  // it can be const, but CallBase doesn't allows const pointer
   Function* NewMalloc = NEW_FUNC(OrigMalloc, "____malloc", M);
   Function* NewFree = NEW_FUNC(OrigFree, "____free", M);
 
