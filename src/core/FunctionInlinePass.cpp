@@ -60,6 +60,9 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
         if(!callee || callee->isDeclaration()) continue;
         if(!(isInlineViable(*callee).isSuccess())) continue;
 
+        // Check Attribute
+        if(callee->hasFnAttribute(Attribute::NoInline)) continue;
+
         // If the sum of colors exceeds the REGISTER_CAP by inlining, do not inlining
         unsigned f_numColor = numColors[callee];
         if(numColor + f_numColor > REGISTER_CAP) {
