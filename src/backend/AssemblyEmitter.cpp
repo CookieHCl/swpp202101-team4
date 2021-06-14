@@ -47,8 +47,8 @@ string AssemblyEmitter::stringBandWidth(Value* v) {
     return to_string(getBitWidth(v->getType()));
 }
 
-AssemblyEmitter::AssemblyEmitter(raw_ostream *fout, TargetMachine& TM, SymbolMap& SM, map<Function*, unsigned>& spOffset) :
-            fout(fout), TM(&TM), SM(&SM), spOffset(spOffset) {}
+AssemblyEmitter::AssemblyEmitter(raw_ostream *fout, TargetMachine& TM, SymbolMap& SM, map<Function*, unsigned>& spOffset, bool hasNewMalloc) :
+            fout(fout), TM(&TM), SM(&SM), spOffset(spOffset), hasNewMalloc(hasNewMalloc) {}
 
 void AssemblyEmitter::visitFunction(Function& F) {
     //print the starting code.
@@ -60,6 +60,11 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
 
     //If entry block, modify SP.
     if(&(BB.getParent()->getEntryBlock()) == &BB) {
+        // init left stack size. left stack size is 102392 instead of 102400
+        // because stack size variable itself is stored at stack
+        if (BB.getParent()->getName() == "main" && hasNewMalloc) {
+            *fout << "  store 8 102392 102392 0\n";
+        }
         //if main, import GV within.
         //this code should happen only if GV array was in the initial program.
         //GV values are all lowered into alloca + calls
@@ -76,7 +81,9 @@ void AssemblyEmitter::visitBasicBlock(BasicBlock& BB) {
         }
         if(spOffset[BB.getParent()] != 0) {
             *fout << "  ; Init stack pointer\n";
-            *fout << emitInst({"sp = sub sp",to_string(spOffset[BB.getParent()]),"64"});
+            // We shouldn't use sp if ____malloc is defined; stack can conflict
+            *fout << (hasNewMalloc ? emitInst({"sp = call ____malloc",to_string(spOffset[BB.getParent()])})
+                                   : emitInst({"sp = sub sp",to_string(spOffset[BB.getParent()]),"64"}));
         }
     }
 }
@@ -303,11 +310,15 @@ void AssemblyEmitter::visitCallInst(CallInst& I) {
 
 //Terminator insts.
 void AssemblyEmitter::visitReturnInst(ReturnInst& I) {
+    // sp is automatically restored when returned; we don't need to add
+    // we just left unnecessary code to avoid possible merge conflict
+    /*
     //increase sp(which was decreased in the beginning of the function.)
     Function* F = I.getFunction();
     if(spOffset[F] > 0) {
         *fout << emitInst({"sp = add sp",to_string(spOffset[F]),"64"});
     }
+    */
     *fout << emitInst({"ret", name(I.getReturnValue())});
 }
 void AssemblyEmitter::visitBranchInst(BranchInst& I) {

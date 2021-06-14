@@ -40,24 +40,47 @@ static cl::opt<bool> optEmitLLVM(
     "emit-llvm", cl::desc("Write output as LLVM IR"),
     cl::cat(optCategory));
 
-enum Opts {
+enum class Opts {
   Arithmetic,
+  BranchPredict,
   FunctionInline,
+  GVN,
+  LoopUnroll,
+  LoopVectorize,
+  MatmulTranspose,
+  MemoryToStack,
+  Phierase,
   RemoveUnused,
-  SimplifyCFG
+  SCCP,
+  SimplifyCFG,
 };
+
+#define OPT_ENUM_VAL(enum, desc) clEnumValN(Opts::enum, #enum, desc)
 
 static unsigned optOptimizationBits;
 static cl::bits<Opts, unsigned> optOptimizations(
     "passes", cl::desc("Apply only selected optimizations:"),
     cl::location(optOptimizationBits), cl::CommaSeparated, cl::cat(optCategory),
     cl::values(
-      clEnumVal(Arithmetic, "Replace with cheaper arithmetic operations"),
-      clEnumVal(FunctionInline, "Inline functions if possible"),
-      clEnumVal(RemoveUnused, "Remove unused BB & alloca & instruction"),
-      clEnumVal(SimplifyCFG, "Simplify and canonicalize the CFG")));
+      OPT_ENUM_VAL(Arithmetic, "Replace with cheaper arithmetic operations"),
+      OPT_ENUM_VAL(BranchPredict, "Set most used branch to false branch"),
+      OPT_ENUM_VAL(FunctionInline, "Inline functions if possible"),
+      OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
+      OPT_ENUM_VAL(LoopUnroll, "Unroll for loop"),
+      OPT_ENUM_VAL(LoopVectorize, "Vectorize load/store instruction in loop"),
+      OPT_ENUM_VAL(MatmulTranspose, "LoopInterchange for more effective vectorize"),
+      OPT_ENUM_VAL(MemoryToStack, "Use stack instead of heap"),
+      OPT_ENUM_VAL(Phierase, "Erase phi node by copying basicblock"),
+      OPT_ENUM_VAL(RemoveUnused, "Remove unused BB & alloca & instruction"),
+      OPT_ENUM_VAL(SCCP, "Sparse Conditinal Constant Propagation"),
+      OPT_ENUM_VAL(SimplifyCFG, "Simplify and canonicalize the CFG")
+    ));
 
-#define IFSET(enum, X) if (optOptimizations.isSet(enum)) { X; }
+static cl::opt<bool> optInvertOptimization(
+    "off", cl::desc("Instead of applying optimizations, exclude selected ones"),
+    cl::cat(optCategory));
+
+#define IFSET(enum, X) if (optOptimizations.isSet(Opts::enum)) { X; }
 
 int main(int argc, char *argv[]) {
   //Parse command line arguments
@@ -66,6 +89,9 @@ int main(int argc, char *argv[]) {
   if (!optOptimizationBits) {
     // if optimization is not specified, all optimizations should be enabled
     optOptimizationBits = -1;
+  }
+  if (optInvertOptimization) {
+    optOptimizationBits = ~optOptimizationBits;
   }
 
   //Parse input LLVM IR module
@@ -85,6 +111,7 @@ int main(int argc, char *argv[]) {
 
   // Init managers
   FunctionPassManager FPM;
+  FunctionPassManager FPM1;
   ModulePassManager MPM;
 
   LoopAnalysisManager LAM;
@@ -102,18 +129,34 @@ int main(int argc, char *argv[]) {
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
   // Add existing IR passes
-  IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
+
+  // matmul
+  IFSET(MatmulTranspose, FPM1.addPass(MatmulTransposePass(optPrintProgress)))
 
   // Add IR passes
-  IFSET(Opts::Arithmetic, FPM.addPass(ArithmeticPass()))
-  IFSET(Opts::RemoveUnused, FPM.addPass(RemoveUnusedPass()))
+  IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
+  IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
+
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(Arithmetic, FPM.addPass(ArithmeticPass()))
+  IFSET(Phierase, FPM.addPass(PhierasePass()))
+  IFSET(RemoveUnused, FPM.addPass(RemoveUnusedPass()))
+  IFSET(BranchPredict, FPM.addPass(BranchPredictPass(optPrintProgress)))
 
   // Add existing IR passes
-  IFSET(Opts::SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(GVN, FPM.addPass(GVN()))
+  IFSET(SCCP, FPM.addPass(SCCPPass()))
 
   // Execute IR passes
-  IFSET(Opts::FunctionInline, MPM.addPass(FunctionInlinePass()))
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM1)));
+  if (optOptimizations.isSet(Opts::FunctionInline) && !optOptimizations.isSet(Opts::LoopUnroll))
+    MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  // IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
+  IFSET(MemoryToStack, MPM.addPass(MemoryToStackPass(optPrintProgress)))
   MPM.run(*M, MAM);
 
   // If flag is set, write output as LLVM assembly
@@ -136,8 +179,6 @@ int main(int argc, char *argv[]) {
   // Execute backend passes
   SplitSelfLoopPass().run(*M, MAM);
   UnfoldVectorInstPass().run(*M, MAM);
-  LivenessAnalysis().run(*M, MAM);
-  SpillCostAnalysis().run(*M, MAM);
   AddressArgCastPass().run(*M, MAM);
   ConstExprRemovePass().run(*M, MAM);
   GEPUnpackPass().run(*M, MAM);

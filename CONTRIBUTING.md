@@ -33,6 +33,7 @@
 - `--passes=<value>`를 사용할 경우 지정한 Pass들만 사용할 수 있다.  
   이때 `<value>`는 Pass 이름들을 쉼표로 구분한 형식이다.  
   Pass 이름은 `enum Opts`에서 지정한 이름들이고, `-h`로 볼 수 있다.
+- `--off`를 사용할 경우 지정한 Pass들만 사용하는 대신 지정한 Pass들만 제외한다.
 - 이 외에는 두 개의 옵션 `<input file>`과 `<output file>`을 받는다.  
   이때 `<output file>`을 생략하거나 `-`로 지정하면 stdout으로 출력한다.
 
@@ -87,8 +88,9 @@ commit을 길게 설명할 필요가 있는 경우 첫 줄에 제목을 적고, 
 
 ### 팁
 
-되도록이면 cherry-pick은 쓰지 않는다.
-cherry-pick을 쓰면 나중에 merge할 때 같은 change를 한 commit이 여러 개 생기게 된다.
+### 되도록이면 cherry-pick은 쓰지 않는다.
+
+cherry-pick을 잘못 쓰면 나중에 merge할 때 같은 change를 한 commit이 여러 개 생길 수 있다.
 
 cherry-pick 안 쓰고 다른 repository의 commit으로 업데이트 하는 법
 
@@ -119,3 +121,33 @@ Sprint 1, Sprint 2, Sprint 3이 있다.
 - draft: 아직 완성되지 않는 이슈다.
 - general: 버그나 최적화는 아닌 이슈다. 주로 NFC가 해당된다.
 - notice: 공지를 위한 이슈로, 모두가 알아야 할 정보가 있을 때 사용한다.
+
+### Branches
+
+- main: 컴파일러에 필요한 코드가 있다. 중요하기 때문에 아래와 같은 제약사항들이 있다.
+  - force push를 할 수 없다. 만일 급한일이 있어서 force push를 해야 할 경우
+    *Settings - Branches*에 가면 force push를 허용할 수 있다.
+  - pull request는 적어도 2개의 approve review가 있어야 한다.
+  - pull request는 build라는 이름의 CI를(ci.yml) 통과해야 한다.
+  - pull request는 모든 conversation을 resolve해야 한다.
+- BENCHMARK_COSTS: main의 코드를 가지고 모든 benchmark를 돌려본 cost들을 저장한다.
+  workflow가 자동으로 업데이트 하므로 **compute-benchmarks.py와 results를 제외하고 다른 파일들을 수정하면 안 된다.**  
+  compute-benchmarks.py와 계산된 benchmark cost에 관한 정보는 [#36](https://github.com/CookieHCl/swpp202101-team4/issues/36)을 참고한다.
+- DOCKER: workflow에 사용하는 [docker](https://github.com/CookieHCl/swpp202101-team4/packages/806657)를 주어진 Dockerfile로 build한다.  
+  **컴파일러와 관계없기 때문에 main과 공통 commit이 없다.**  
+  [주어진 docker](https://hub.docker.com/r/sunghwanlee/swpp202101-ci)에
+  interpreter, benchmark와 `GitPython`, `pandas` 패키지가 설치된 Python을 추가했다.
+  또한, 아래 환경변수들을 추가했다.
+  - LLVM_DIR: llvm의 bin 폴더다.
+  - INTERPRETER: interpreter 파일이다.
+  - BENCHMARK_DIR: benchmark들이 있는 폴더다.
+
+### workflows
+
+- ci.yml: main branch에 있다.  
+  main에 push하거나 main에 pull request를 할 때마다 filecheck과 benchmark들을 돌려서
+  올바른 결과를 내는지 확인한다. 이 CI를 통과해야 main에 commit할 수 있다.
+- compute-benchmarks.yml: main branch에 있다.  
+  main에 push할 때마다 benchmark들을 돌려서 BENCHMARK_COSTS branch를 업데이트 한다.
+- docker-image.yml: DOCKER branch에 있다.  
+  DOCKER에 push할 때마다 [docker](https://github.com/CookieHCl/swpp202101-team4/packages/806657)를 build한다.
