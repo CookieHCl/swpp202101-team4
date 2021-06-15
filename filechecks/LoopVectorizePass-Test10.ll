@@ -5,8 +5,10 @@ target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local void @step(i64* %A, i64* %B, i32 %n) #0 {
+; CHECK: start step 3
 ; CHECK: r{{[0-9]+}} _ r{{[0-9]+}} r{{[0-9]+}} = vload 4
 ; CHECK: store 4 r{{[0-9]+}} _ r{{[0-9]+}} r{{[0-9]+}}
+; CHECK: end step
 entry:
   %A.addr = alloca i64*, align 8
   %B.addr = alloca i64*, align 8

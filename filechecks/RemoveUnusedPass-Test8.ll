@@ -6,7 +6,9 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local void @copy(i32* %A, i32* %B, i32 %n) #0 {
 entry:
-; CHECK: store 4 r3 r1 0
+; CHECK: start copy 3
+; CHECK: store 4 r{{[0-9]+}} r{{[0-9]+}} 0
+; CHECK: end copy
   %A.addr = alloca i32*, align 8
   %B.addr = alloca i32*, align 8
   %n.addr = alloca i32, align 4

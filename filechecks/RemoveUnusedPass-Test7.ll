@@ -6,7 +6,9 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local void @hard(i32 %n) #0 {
 entry:
-; CHECK: store 4 0 r1 0
+; CHECK: start hard 1
+; CHECK: store 4 0 r{{[0-9]+}} 0
+; CHECK: end hard
   %n.addr = alloca i32, align 4
   %c = alloca i32*, align 8
   %i = alloca i32, align 4

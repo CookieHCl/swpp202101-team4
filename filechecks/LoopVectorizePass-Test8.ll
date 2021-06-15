@@ -6,7 +6,9 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local void @dupstore(i64* %A, i64* %B, i32 %n) #0 {
 entry:
+; CHECK: start dupstore 3
 ; CHECK-NOT: vstore
+; CHECK: end dupstore
   %A.addr = alloca i64*, align 8
   %B.addr = alloca i64*, align 8
   %n.addr = alloca i32, align 4

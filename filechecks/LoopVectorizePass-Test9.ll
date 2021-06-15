@@ -5,8 +5,10 @@ target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i64 @rearrange(i64* %A, i64* %re, i32 %n) #0 {
+; CHECK: start rearrange 3
 ; CHECK: vload 4
 ; CHECK-NOT: vload
+; CHECK: end rearrange
 entry:
   %A.addr = alloca i64*, align 8
   %re.addr = alloca i64*, align 8

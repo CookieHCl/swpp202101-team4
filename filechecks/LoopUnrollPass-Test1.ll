@@ -5,9 +5,11 @@ target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @basic(i64* %A, i64* %B, i32 %n) #0 {
+; CHECK: start basic 3
 ; CHECK-COUNT-8: store
 ; CHECK-DAG: epil
 ; CHECK: store
+; CHECK: end basic
 entry:
   %A.addr = alloca i64*, align 8
   %B.addr = alloca i64*, align 8
