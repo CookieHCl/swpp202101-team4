@@ -1,15 +1,12 @@
 import git
+import pandas as pd
+
 import math
 import os
-import pandas as pd
+import shutil
 import subprocess
 import sys
-
-def safe_remove(filename):
-    try:
-        os.remove(filename)
-    except FileNotFoundError:
-        pass
+import threading
 
 def read_cost(folder, benchmark):
     filename = f'{folder}/{benchmark}.csv'
@@ -25,13 +22,42 @@ def read_cost(folder, benchmark):
 def write_cost(folder, benchmark, cost_file):
     cost_file.to_csv(f'{folder}/{benchmark}.csv', index_label='commit',na_rep='nan')
 
+# for thread
+def run_benchmark(benchmark, tests):
+    cwd = f'temp/{benchmark}'
+    os.mkdir(cwd)
+
+    # {input file name : cost}
+    benchmark_cost = {}
+    subprocess.run([COMPILER, f'{BENCHMARK_DIR}/{benchmark}/src/{benchmark}.ll', 'tmp.s'], cwd=cwd)
+    for input_file in tests:
+        output_file = input_file.replace('input', 'output')
+        with open(f'{BENCHMARK_DIR}/{benchmark}/test/{input_file}', 'r') as input, open(f'{BENCHMARK_DIR}/{benchmark}/test/{output_file}', 'r') as output:
+            proc = subprocess.run([INTERPRETER, 'tmp.s'], stdin=input, stdout=subprocess.PIPE, cwd=cwd)
+            if proc.returncode != 0:
+                print(f"WARNING: benchmark {benchmark} test {input_file} returned nonzero")
+                benchmark_cost[input_file] = math.nan
+            elif proc.stdout.decode() != output.read():
+                print(f"WARNING: benchmark {benchmark} test {input_file} have different output")
+                benchmark_cost[input_file] = math.nan
+            else:
+                with open(os.path.join(cwd, 'sf-interpreter.log')) as log:
+                    content = log.readlines()
+                    cost = float(content[1][6:])
+                    mem = float(content[2][24:])
+                    benchmark_cost[input_file] = cost + mem
+                    print(f'benchmark {benchmark} test {input_file}: cost {cost}, memcost {mem}')
+
+    benchmark_costs[benchmark] = benchmark_costs[benchmark].append(pd.DataFrame(benchmark_cost, index = [REPO_COMMIT]))
+
 
 # parse arguments
 if len(sys.argv) != 3:
     sys.exit("compute-benchmarks.py <sf-interpreter path> <benchmark dir>")
 
-INTERPRETER = sys.argv[1]
-BENCHMARK_DIR = sys.argv[2]
+COMPILER = os.path.abspath('bin/sf-compiler')
+INTERPRETER = os.path.abspath(sys.argv[1])
+BENCHMARK_DIR = os.path.abspath(sys.argv[2])
 
 # get git commit
 with git.Repo('.') as repo:
@@ -46,10 +72,11 @@ with os.scandir(BENCHMARK_DIR) as entries:
     for benchmark in [f.name for f in entries if f.is_dir() and f.name != '.git']:
         benchmarks[benchmark] = [f for f in os.listdir(f'{BENCHMARK_DIR}/{benchmark}/test') if f.startswith('input')]
 
-
 # make dir
 os.makedirs('results', exist_ok=True)
 os.makedirs('ratio_results', exist_ok=True)
+os.makedirs('temp', exist_ok=True)
+
 
 # read cost file
 print("Reading costs...")
@@ -66,36 +93,20 @@ benchmark_cost_ratios = {}
 for benchmark in benchmarks:
     benchmark_cost_ratios[benchmark] = read_cost('ratio_results', benchmark)
 
+
 # run benchmarks
 print("Running benchmarks...")
-for benchmark, tests in benchmarks.items():
-    # {input file name : cost}
-    benchmark_cost = {}
-    subprocess.run(['bin/sf-compiler', f'{BENCHMARK_DIR}/{benchmark}/src/{benchmark}.ll', 'tmp.s'])
-    for input_file in tests:
-        output_file = input_file.replace('input', 'output')
-        with open(f'{BENCHMARK_DIR}/{benchmark}/test/{input_file}', 'r') as input, open(f'{BENCHMARK_DIR}/{benchmark}/test/{output_file}', 'r') as output:
-            proc = subprocess.run([INTERPRETER, 'tmp.s'], stdin=input, stdout=subprocess.PIPE)
-            if proc.returncode != 0:
-                print(f"WARNING: benchmark {benchmark} test {input_file} returned nonzero")
-                benchmark_cost[input_file] = math.nan
-            elif proc.stdout.decode() != output.read():
-                print(f"WARNING: benchmark {benchmark} test {input_file} have different output")
-                benchmark_cost[input_file] = math.nan
-            else:
-                with open('sf-interpreter.log') as log:
-                    content = log.readlines()
-                    cost = float(content[1][6:])
-                    mem = float(content[2][24:])
-                    benchmark_cost[input_file] = cost + mem
-                    print(f'benchmark {benchmark} test {input_file}: cost {cost}, memcost {mem}')
 
-    benchmark_costs[benchmark] = benchmark_costs[benchmark].append(pd.DataFrame(benchmark_cost, index = [REPO_COMMIT]))
+benchmark_threads = []
+for benchmark in benchmarks:
+    thread = threading.Thread(target = run_benchmark, args = (benchmark, benchmarks[benchmark]))
+    thread.start()
+    benchmark_threads.append(thread)
+for thread in benchmark_threads:
+    thread.join()
 
-    # remove temporary files
-    safe_remove('tmp.s')
-    safe_remove('sf-interpreter.log')
-    safe_remove('sf-interpreter-cost.log')
+shutil.rmtree('temp')
+
 
 # {benchmark name : average benchmark cost}
 avg_cost = {}
