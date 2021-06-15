@@ -28,6 +28,8 @@ public:
   //Register file size of the target machine.
   static const unsigned REGISTER_CAP = 32;
 
+  static const unsigned LIMIT_INSTS = 500;
+
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
   
 };

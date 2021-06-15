@@ -91,7 +91,7 @@ define dso_local i64 @bigf(i64 %0, i64 %1, i64 %2) {
 define dso_local i32 @main() {
 ;   CHECK-NOT:  call max
 ;   CHECK-NOT:  call min
-;   CHECK:      call bigf
+;   CHECK-NOT:      call bigf
   %1 = alloca i32, align 4
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
