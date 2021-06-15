@@ -1,5 +1,16 @@
 #include "LoopSimplifyUtil.h"
 
+
+/*
+ *                  Loop Simplify Util
+ *
+ *  This module contains loop-related simplify utils.
+ *  Contained functions help making canonical loop.
+ *  All utils invalidate AnalysisManager.
+ *  
+ */ 
+
+
 void insertPreheader(Function &F, FunctionAnalysisManager &FAM) {
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   if (LI.empty()) return;
