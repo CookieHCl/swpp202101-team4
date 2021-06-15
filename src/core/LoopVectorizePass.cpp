@@ -461,31 +461,9 @@ bool LoopVectorizePass::vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE, Ta
   return isChanged;
 }
 
-void LoopVectorizePass::makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM) {
-  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  AssumptionCache &AC = FAM.getResult<AssumptionAnalysis>(F);
-
-  SmallVector<AllocaInst*, 8> allocaInstVector;
-  bool isChanged = false;
-
-  while (true) {
-    allocaInstVector.clear();
-    for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
-      if (AllocaInst *allocaInst = dyn_cast<AllocaInst>(&*I))
-        if (isAllocaPromotable(allocaInst)) allocaInstVector.push_back(allocaInst);
-
-    if (allocaInstVector.empty()) break;
-
-    PromoteMemToReg(allocaInstVector, DT, &AC);
-    isChanged = true;
-  }
-
-  if (isChanged) FAM.invalidate(F, PreservedAnalyses::none());
-}
-
 PreservedAnalyses LoopVectorizePass::run(Function &F, FunctionAnalysisManager &FAM) {
   // In order to optimize the loop, its induction need to be a PHInode. (Scalar Evolution)
-  this->makeAllocaAsPHI(F, FAM);
+  makeAllocaAsPHI(F, FAM);
 
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
