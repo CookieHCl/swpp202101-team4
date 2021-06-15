@@ -43,6 +43,7 @@ static cl::opt<bool> optEmitLLVM(
 enum class Opts {
   Arithmetic,
   BranchPredict,
+  ConstantMerge,
   FunctionInline,
   GVN,
   LoopUnroll,
@@ -64,6 +65,7 @@ static cl::bits<Opts, unsigned> optOptimizations(
     cl::values(
       OPT_ENUM_VAL(Arithmetic, "Replace with cheaper arithmetic operations"),
       OPT_ENUM_VAL(BranchPredict, "Set most used branch to false branch"),
+      OPT_ENUM_VAL(ConstantMerge, "Merge redundant constant chain"),
       OPT_ENUM_VAL(FunctionInline, "Inline functions if possible"),
       OPT_ENUM_VAL(GVN, "Constant folding & eliminate fully redundant instructions and dead load"),
       OPT_ENUM_VAL(LoopUnroll, "Unroll for loop"),
@@ -138,6 +140,7 @@ int main(int argc, char *argv[]) {
   // Add IR passes
   IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
   IFSET(LoopVectorize, FPM.addPass(LoopVectorizePass(*M, optPrintProgress)))
+  IFSET(ConstantMerge, FPM.addPass(ConstantMergePass(optPrintProgress)))
 
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(Arithmetic, FPM.addPass(ArithmeticPass()))
