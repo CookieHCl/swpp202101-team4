@@ -1,6 +1,8 @@
 #include "ArithmeticPass.h"
 
 PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM) {
+  // check if changed to return correct preserved analyses
+  bool Changed = false;
 
   Value* FirstVal; //FirstOperand Value
   ConstantInt* ConsVal; //Constant Value
@@ -17,26 +19,31 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
 
       //Case one: add X X -> mul X 2
       if(match(&I, m_Add(m_Value(FirstVal), m_Deferred(FirstVal)))){
+        Changed = true;
         InstAdd.push_back(&I);
       }
 
       //Case two: shl X C -> mul X (2^C)
       if(match(&I, m_Shl(m_Value(FirstVal), m_ConstantInt(ConsVal)))){
+        Changed = true;
         InstShl.push_back(&I);
       }
 
       //Case three: lshr X C -> Udiv X (2^C)
       if(match(&I, m_LShr(m_Value(FirstVal), m_ConstantInt(ConsVal)))){
+        Changed = true;
         InstLShr.push_back(&I);
       }
 
       //Case four: ashr X C -> Sdiv X (2^C)
       if(match(&I, m_AShr(m_Value(FirstVal), m_ConstantInt(ConsVal)))){
+        Changed = true;
         InstAShr.push_back(&I);
       }
 
       //Case five: and X (2^C-1) -> udiv X (2^C)
       if(match(&I, m_And(m_Value(FirstVal), m_ConstantInt(ConsVal))) || match(&I, m_And(m_ConstantInt(ConsVal), m_Value(FirstVal)))){
+        Changed = true;
 
         uint64_t cons = ConsVal->getZExtValue(), width = FirstVal->getType()->getIntegerBitWidth();
 
@@ -105,5 +112,5 @@ PreservedAnalyses ArithmeticPass::run(Function &F, FunctionAnalysisManager &FAM)
     }
   }
 
-  return PreservedAnalyses::none();
+  return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }

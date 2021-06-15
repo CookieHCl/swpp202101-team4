@@ -1,6 +1,8 @@
 #include "PhierasePass.h"
 
 PreservedAnalyses PhierasePass::run(Function &F, FunctionAnalysisManager &FAM){
+  // check if changed to return correct preserved analyses
+  bool Changed = false;
   
   queue<BasicBlock*> que;
 
@@ -16,6 +18,8 @@ PreservedAnalyses PhierasePass::run(Function &F, FunctionAnalysisManager &FAM){
       continue;
     }
 
+    // found removable phi
+    Changed = true;
     que.push(&BB);
   }
 
@@ -75,5 +79,5 @@ PreservedAnalyses PhierasePass::run(Function &F, FunctionAnalysisManager &FAM){
   }
 
 
-  return PreservedAnalyses::none();
+  return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
