@@ -6,9 +6,11 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local void @add(i64* %A, i64* %B, i32 %n, i32 %m) #0 {
 entry:
+; CHECK: start add 4
 ; CHECK: vload 4
 ; CHECK: vload 4
 ; CHECK: vstore 4
+; CHECK: end add
   %A.addr = alloca i64*, align 8
   %B.addr = alloca i64*, align 8
   %n.addr = alloca i32, align 4

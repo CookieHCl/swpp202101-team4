@@ -7,8 +7,8 @@ target triple = "x86_64-unknown-linux-gnu"
 define dso_local i32 @norm(i32 %x, i32 %y) #0 {
 entry:
 ; CHECK: start norm 2:
-; CHECK-NOT: store 4 r1 sp 16
-; CHECK-NOT: store 4 r1 sp 20
+; CHECK-NOT: store 4 r{{[0-9]+}} sp 16
+; CHECK-NOT: store 4 r{{[0-9]+}} sp 20
   %x.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4
   %sx = alloca i32, align 4
