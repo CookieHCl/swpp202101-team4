@@ -4,7 +4,7 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16
 target triple = "x86_64-pc-linux-gnu"
 
 ; Function Attrs: noinline nounwind optnone uwtable
-define dso_local i64 @max(i64 %0, i64 %1) #0 {
+define dso_local i64 @max(i64 %0, i64 %1) {
   %3 = alloca i64, align 8
   %4 = alloca i64, align 8
   store i64 %0, i64* %3, align 8
@@ -55,7 +55,7 @@ define dso_local i64 @recfibo(i64 %0) #0 {
 }
 
 ; Function Attrs: noinline nounwind optnone uwtable
-define dso_local i64 @f1(i64 %0) #0 {
+define dso_local i64 @f1(i64 %0) {
   %2 = alloca i64, align 8
   %3 = alloca i64, align 8
   %4 = alloca i64, align 8
@@ -88,7 +88,7 @@ define dso_local i64 @f1(i64 %0) #0 {
 }
 
 ; Function Attrs: noinline nounwind optnone uwtable
-define dso_local i64 @f2(i64 %0) #0 {
+define dso_local i64 @f2(i64 %0) {
   %2 = alloca i64, align 8
   %3 = alloca i64, align 8
   %4 = alloca i64, align 8
@@ -121,8 +121,7 @@ define dso_local i64 @f2(i64 %0) #0 {
 }
 
 ; Function Attrs: noinline nounwind optnone uwtable
-define dso_local i32 @main() #0 {
-;   CHECK:      sp = sub sp 28 64
+define dso_local i32 @main() {
 ;   CHECK:      call recfibo
 ;   CHECK-NOT:	call max
   %1 = alloca i32, align 4
@@ -141,8 +140,6 @@ define dso_local i32 @main() #0 {
   %11 = trunc i64 %10 to i32
   ret i32 %11
 }
-
-attributes #0 = { noinline nounwind optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="all" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.module.flags = !{!0}
 !llvm.ident = !{!1}
