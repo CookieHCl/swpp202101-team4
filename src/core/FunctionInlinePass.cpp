@@ -26,6 +26,7 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
   // caller to inline and Function's numColor
   vector<pair<CallBase *, unsigned> > do_inline;
   map<Function *, unsigned> numColors;
+  map<Function *, unsigned> numInsts;
 
   for(Function& F : M) {
 
@@ -34,6 +35,7 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     // backend::RegisterGraph.getNumColors(Function*)
     Function* copyF = copyM->getFunction(F.getName());
     numColors[&F] = RG.getNumColors(copyF);
+    numInsts[&F] = F.getInstructionCount();
   }
 
   for(Function& F : M) {
@@ -43,7 +45,9 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     // If there is no extra register, do nothing for the function.
 
     unsigned numColor = numColors[&F];
+    unsigned numInst = numInsts[&F];
     if(numColor >= REGISTER_CAP) continue;
+    if(numInst >= LIMIT_INSTS) continue;
 
     // Where F's callers start to be stored in do_inline
     int st = do_inline.size();
@@ -60,9 +64,14 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
         if(!callee || callee->isDeclaration()) continue;
         if(!(isInlineViable(*callee).isSuccess())) continue;
 
+        // Check Attribute
+        if(callee->hasFnAttribute(Attribute::NoInline)) continue;
+
         // If the sum of colors exceeds the REGISTER_CAP by inlining, do not inlining
         unsigned f_numColor = numColors[callee];
-        if(numColor + f_numColor > REGISTER_CAP) {
+        unsigned f_numInst = numInsts[callee];
+        if(callee->arg_size() + f_numColor > REGISTER_CAP) continue;
+        if(numInst + f_numInst > LIMIT_INSTS) {
           // An index that element have maximum register count
           unsigned i_m = -1;
 
@@ -70,19 +79,27 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
             if(i_m == -1) i_m = i;
             else if(do_inline[i_m].second < do_inline[i].second) i_m = i;
           }
-          if(i_m != -1 && f_numColor < do_inline[i_m].second) {
-            numColor += f_numColor - do_inline[i_m].second;
-            do_inline[i_m] = make_pair(caller, f_numColor);
+          if(i_m != -1 && f_numInst < do_inline[i_m].second) {
+            numInst += f_numInst - do_inline[i_m].second;
+            do_inline[i_m] = make_pair(caller, f_numInst);
           }
         }
         else {
-          numColor += f_numColor;
-          do_inline.push_back(make_pair(caller, f_numColor));
+          numInst += f_numInst;
+          do_inline.push_back(make_pair(caller, f_numInst));
         }
       }
     }
+
+    for(int i = st; i < do_inline.size(); ++i) {
+      Function *callee = do_inline[i].first->getCalledFunction();
+      if(numColor < numColors[callee] + callee->arg_size())
+        numColor = numColors[callee] + callee->arg_size();
+    }
+
     // update numColors
     numColors[&F] = numColor;
+    numInsts[&F] = numInst;
   }
 
   for(auto& e : do_inline) {
