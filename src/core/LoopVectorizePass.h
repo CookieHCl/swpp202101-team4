@@ -1,19 +1,12 @@
 #ifndef LOOPVECTORIZEPASS_H
 #define LOOPVECTORIZEPASS_H
 
-#include "llvm/IR/PassManager.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/ilist_iterator.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Passes/PassBuilder.h"
-#include "llvm/Passes/PassPlugin.h"
-#include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/Transforms/Utils/LoopUtils.h"
-#include "llvm/Transforms/Utils/PromoteMemToReg.h"
-#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "LoopSimplifyUtil.h"
 
 #include <vector>
 #include <queue>
@@ -67,7 +60,6 @@ private:
   Function* getVectorCallee(int dimension, LoopVectorizePass::CalleeType calleeType);
   template<typename Type> int getSCEVOperandUnmatchedIndex(const Type *scev1, const Type *scev2);
   void fillVectorArgument(Value *address, const int64_t mask, SmallVector<Value*, 8> &Args);
-  void makeAllocaAsPHI(Function &F, FunctionAnalysisManager &FAM);
   bool vectorize(Loop *L, LoopInfo &LI, ScalarEvolution &SE, TargetTransformInfo &TTI, const DataLayout &DL, DominatorTree &DT);
   bool vectorizeMap(InstChainMap &instChainMap, ScalarEvolution &SE, const DataLayout &DL, DominatorTree &DT);
   bool vectorizeInstructions(InstChain &instChain, ScalarEvolution &SE, const DataLayout &DL, DominatorTree &DT);
