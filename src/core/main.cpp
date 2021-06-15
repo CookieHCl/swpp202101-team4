@@ -113,7 +113,6 @@ int main(int argc, char *argv[]) {
 
   // Init managers
   FunctionPassManager FPM;
-  FunctionPassManager FPM1;
   ModulePassManager MPM;
 
   LoopAnalysisManager LAM;
@@ -130,12 +129,12 @@ int main(int argc, char *argv[]) {
   PB.registerLoopAnalyses(LAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
+  // matmul
+  IFSET(MatmulTranspose, FPM.addPass(MatmulTransposePass(optPrintProgress)))
+
   // Add existing IR passes
   IFSET(GVN, FPM.addPass(GVN({true, true, true, true, true})))
   IFSET(SCCP, FPM.addPass(SCCPPass()))
-
-  // matmul
-  IFSET(MatmulTranspose, FPM1.addPass(MatmulTransposePass(optPrintProgress)))
 
   // Add IR passes
   IFSET(LoopUnroll, FPM.addPass(LoopUnrollPass(optPrintProgress)))
@@ -152,9 +151,14 @@ int main(int argc, char *argv[]) {
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN()))
   IFSET(SCCP, FPM.addPass(SCCPPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(Phierase, FPM.addPass(PhierasePass()))
 
   // Execute IR passes
-  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM1)));
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
   IFSET(MemoryToStack, MPM.addPass(MemoryToStackPass(optPrintProgress)))
