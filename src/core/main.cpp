@@ -155,10 +155,8 @@ int main(int argc, char *argv[]) {
 
   // Execute IR passes
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM1)));
-  if (optOptimizations.isSet(Opts::FunctionInline) && !optOptimizations.isSet(Opts::LoopUnroll))
-    MPM.addPass(FunctionInlinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
-  // IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
+  IFSET(FunctionInline, MPM.addPass(FunctionInlinePass()));
   IFSET(MemoryToStack, MPM.addPass(MemoryToStackPass(optPrintProgress)))
   MPM.run(*M, MAM);
 
