@@ -24,3 +24,4 @@ Add MemoryToStackPass (#51),178.6,61.8,364.2,106.6,17.0,28.2,319.4,353.0
 MatmulTransposePass (#52),178.6,61.8,364.2,106.6,17.0,28.2,319.4,353.0
 Implement ConstantMergePass (#60),178.6,61.8,364.2,106.6,17.0,28.2,319.4,353.0
 FunctionInlinePass Function Attribute 미확인 (#58),178.6,61.8,364.2,106.6,17.0,28.2,319.4,353.0
+Return correct PreservedAnalysis (#59),178.6,61.8,364.2,106.6,17.0,28.2,319.4,353.0
