@@ -12,6 +12,8 @@
  ************************************************/
 
 PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM){
+  // check if changed to return correct preserved analyses
+  bool Changed = false;
 
   // InlineFunctionInfo
   FunctionAnalysisManager &FAM = MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
@@ -110,8 +112,8 @@ PreservedAnalyses FunctionInlinePass::run(Module &M, ModuleAnalysisManager &MAM)
     //                                         AAResults *CalleeAAR,
     //                                         bool InsertLifetime,
     //                                         Function *ForwardVarArgsTo)
-    InlineFunction(*caller, IFI, nullptr, false, nullptr);
+    Changed |= InlineFunction(*caller, IFI, nullptr, false, nullptr).isSuccess();
   }
 
-  return PreservedAnalyses::none();
+  return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
 }
