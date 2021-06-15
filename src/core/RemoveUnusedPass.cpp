@@ -1,9 +1,14 @@
 #include "RemoveUnusedPass.h"
 
 /*
-  This Pass remove unreachable blocks and unused variables.
-  It reduces cost caused by unused calculation.
-*/
+ *                      Remove Unused Pass
+ *
+ *  This Pass remove unreachable blocks and unused variables.
+ *  It reduces cost caused by unused calculation.
+ *  This Pass assumes all arguments and global values are necessary.
+ *  
+ */ 
+
 
 vector<BasicBlock*> RemoveUnusedPass::getUnreachableBB(Function &F, FunctionAnalysisManager &FAM) {
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
