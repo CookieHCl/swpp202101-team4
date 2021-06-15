@@ -8,8 +8,8 @@ define dso_local i32* @new(i32 %x) #0 {
 ; CHECK: start new 1:
 entry:
 ; CHECK-NOT: store 4 
-; CHECK-NOT: store 8 r1 sp 4
-; CHECK-NOT: store 8 r1 sp 12
+; CHECK-NOT: store 8 r{{[0-9]+}} sp 4
+; CHECK-NOT: store 8 r{{[0-9]+}} sp 12
   %x.addr = alloca i32, align 4
   %a1 = alloca i32*, align 8
   %to_remove1 = alloca i32*, align 8

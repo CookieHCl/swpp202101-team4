@@ -6,12 +6,14 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local void @reuse(i64* %A, i64 %n) #0 {
 entry:
+; CHECK: start reuse 2
 ; CHECK-DAG: vstore 2
 ; CHECK-DAG: vload
 ; CHECK-DAG: store
 ; CHECK-DAG: store
 ; CHECK-DAG: load
 ; CHECK-DAG: load
+; CHECK: end reuse
   %A.addr = alloca i64*, align 8
   %n.addr = alloca i64, align 8
   %i = alloca i32, align 4

@@ -5,8 +5,10 @@ target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local void @cascade(i64* %A, i32 %n) #0 {
+; CHECK: start cascade 2
 ; CHECK-NOT: vload
 ; CHECK-NOT: vstore
+; CHECK: end cascade
 entry:
   %A.addr = alloca i64*, align 8
   %n.addr = alloca i32, align 4
