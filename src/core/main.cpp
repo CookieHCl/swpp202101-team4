@@ -152,6 +152,12 @@ int main(int argc, char *argv[]) {
   IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
   IFSET(GVN, FPM.addPass(GVN()))
   IFSET(SCCP, FPM.addPass(SCCPPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(SimplifyCFG, FPM.addPass(SimplifyCFGPass()))
+  IFSET(Phierase, FPM.addPass(PhierasePass()))
 
   // Execute IR passes
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM1)));
