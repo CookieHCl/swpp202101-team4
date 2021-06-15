@@ -59,7 +59,6 @@ ConstantMergePass::ChainUnit ConstantMergePass::ChainUnit::merge(ConstantMergePa
       // else, the result is Constant - Value
       //
       APInt newInt = sourceUnit.isReversed ? (sourceInt - Int) : (sourceInt + Int);
-      if (sourceUnit.isReversed) outs() << sourceInt << " - " << Int << " = " << newInt << "\n";
       Constant *newConst = ConstantInt::get(this->constant->getType(), newInt);
       ConstantInt *newConstInt = dyn_cast<ConstantInt>(newConst);
       bool newIsReversed = this->isReversed ^ sourceUnit.isReversed;
@@ -112,12 +111,12 @@ ConstantMergePass::ChainUnit ConstantMergePass::ChainUnit::createChainUnit(Instr
 bool ConstantMergePass::tryMergeConstant(Instruction *inst, BinaryOperator::BinaryOps ops) {
   bool isChanged = false;
 
-  logs() << "Target : " << *inst << "\n";
+  logs() << "Target   : " << *inst << "\n";
 
   ChainUnit chainUnit = ChainUnit::createChainUnit(inst);
   if (!chainUnit.isValid()) return isChanged;
 
-  logs() << chainUnit << "\n";
+  logs() << "Current  : " << chainUnit << "\n";
 
   SmallVector<User*> userVector(inst->user_begin(), inst->user_end());
 
@@ -128,16 +127,16 @@ bool ConstantMergePass::tryMergeConstant(Instruction *inst, BinaryOperator::Bina
     if (userInst->getOpcode() != ops) continue;
 
     ChainUnit nextChainUnit = ChainUnit::createChainUnit(userInst);
-    logs() << "next : " << nextChainUnit << "\n";
+    logs() << "Next     : " << nextChainUnit << "\n";
     if (!nextChainUnit.isValid()) continue;
 
     ChainUnit newChainUnit = nextChainUnit.merge(chainUnit);
-    logs() << "new : " << newChainUnit << "\n";
+    logs() << "New      : " << newChainUnit << "\n";
     if (!newChainUnit.isValid()) continue;
 
     Instruction *newInst = newChainUnit.createInstruction(userInst);
     ReplaceInstWithInst(userInst, newInst);
-    logs() << "new inst : " << *newInst << "\n";
+    logs() << "New Inst : " << *newInst << "\n";
 
     isChanged = true;
   }
