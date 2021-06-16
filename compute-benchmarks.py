@@ -48,7 +48,9 @@ def run_benchmark(benchmark, tests):
                     benchmark_cost[input_file] = cost + mem
                     print(f'benchmark {benchmark} test {input_file}: cost {cost}, memcost {mem}')
 
+    lock.acquire()
     benchmark_costs[benchmark] = benchmark_costs[benchmark].append(pd.DataFrame(benchmark_cost, index = [REPO_COMMIT]))
+    lock.release()
 
 
 # parse arguments
@@ -96,6 +98,9 @@ for benchmark in benchmarks:
 
 # run benchmarks
 print("Running benchmarks...")
+
+# lock for modifying benchmark_costs
+lock = threading.Lock()
 
 benchmark_threads = []
 for benchmark in benchmarks:
